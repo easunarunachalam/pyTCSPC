@@ -63,10 +63,21 @@ class SDT(object):
             plt.imshow(im,cmap=cmap)
         return im
 
-    def hist(self, mode="sum", maxval=200):
+    def hist(self, mode="sum", minval=0, maxval=200, interval=1):
+        '''
+        calculate histogram of pixel values
+
+        Parameters
+        ----------
+        mode (str; default="sum"): option passed to image function
+        maxval (int or float): maximum value in histogram
+        minval (int or float): minimum value in histogram
+        intval (int or float): histogram bin width
+        '''
+
         im = self.image(mode=mode)
         flat_val = np.reshape(im, (np.size(im),1))
-        counts, bin_edges = np.histogram(flat_val, bins=np.arange(0,maxval)-0.5)
+        counts, bin_edges = np.histogram(flat_val, bins=np.arange(minval,maxval,interval)-0.5)
         bin_centers = bin_edges[:-1] + 0.5
 
         return counts, bin_centers
@@ -81,6 +92,7 @@ class SDT(object):
         ----------
         units (str, default="ns"): if "ns", use units of nanoseconds; if not specified, use default units (seconds)
         '''
+
         if units == "ns":
             return self.times*1e9
         else:
@@ -235,22 +247,6 @@ def sdt_to_images(
             cv2.imwrite(os.path.join(source_folder, im_folder, os.path.splitext(filename)[0] + "." + im_format), im)
 
     return sdt_filenames, timeseries
-
-
-def expmix(t, tau, fraction):
-
-    if len(tau) != len(fraction):
-        raise ValueError("`tau' and `fraction' arrays must have the same size.")
-
-    sumf = np.sum(fraction)
-    print(sumf)
-
-    if sumf > 1:
-        raise ValueError("Sum of fractions must not exceed 1.")
-
-    return (1-sumf) + np.sum(
-        np.array([fraction[i]*np.exp(-t/tau[i]) for i in range(len(tau))])
-        , axis=0)
 
 class decay_group:
 
