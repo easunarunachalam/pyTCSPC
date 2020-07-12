@@ -63,6 +63,14 @@ class SDT(object):
             plt.imshow(im,cmap=cmap)
         return im
 
+    def hist(self, mode="sum", maxval=200):
+        im = self.image(mode=mode)
+        flat_val = np.reshape(im, (np.size(im),1))
+        counts, bin_edges = np.histogram(flat_val, bins=np.arange(0,maxval)-0.5)
+        bin_centers = bin_edges[:-1] + 0.5
+
+        return counts, bin_centers
+
     def total_photon_count(self):
         return self.data.sum()
 
