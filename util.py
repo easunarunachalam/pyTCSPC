@@ -202,7 +202,8 @@ def sdt_to_images(
         illprof=1,
         intensity_scale=1,
         flipud=True,
-        fliplr=False
+        fliplr=False,
+        return_objects=False
     ):
     '''
     generate intensity images from all sdt files
@@ -227,6 +228,7 @@ def sdt_to_images(
     sdt_filenames = [fn for fn in glob.glob(os.path.join(exp_folder,"**/*.sdt"), recursive=True) if ((exclude_folder not in fn) and (exclude_name not in fn))]
     print(sdt_filenames)
     timeseries    = [None]*len(sdt_filenames)
+    sdt_list      = [None]*len(sdt_filenames)
 
     for i, fn in enumerate(sdt_filenames):
 
@@ -246,7 +248,13 @@ def sdt_to_images(
         if im_save:
             cv2.imwrite(os.path.join(source_folder, im_folder, os.path.splitext(filename)[0] + "." + im_format), im)
 
-    return sdt_filenames, timeseries
+        if return_objects:
+            sdt_list[i] = sdt
+
+    if return_objects:
+        return sdt_filenames, timeseries, sdt_list
+    else:
+        return sdt_filenames, timeseries
 
 class decay_group:
 
