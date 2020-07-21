@@ -38,26 +38,63 @@ class SDT(object):
         self.times    = self.file.times[block]
 
         # size of time bin (in nanoseconds)
-        self.dt       = (self.times[1] - self.times[0])*1e9 # self.times[-1]/(len(self.times)-1)*1e9
+        self.dt       = (self.times[1] - self.times[0])*1e9
         self.times    += self.times[1] - self.times[0]
 
+        # number of frames in exposure (should be an integer)
         self.numscans = self.file.measure_info[0].MeasHISTInfo.fida_points[0]
+
+        # (optional) store a mask indicating which pixels correspond to cells
         self.iscell   = None
 
-    def image(self, mode="sum", show=False, cmap="gray"):
+    def image(
+        self,
+        mode="sum",
+        adjust_intensity=False,
+        illprof=None,
+        intensity_scale=1,
+        show=False,
+        cmap="gray"
+        ):
         '''
         create intensity image by summing photon counts over time for each pixel
 
         Parameters
         ----------
+        mode : {"sum", "meantau"}
+            - "sum": produce intensity image
+            - "meantau": produce mean lifetime image
+        adjust_intensity : bool
+            adjust intensities according to number of scans and specified intensity scale
+        illprof : float or 2-d numpy.ndarray with same x, y dimensions self.data
+            illumination profile
         show (bool; default=False): if True, show the intensity images
         cmap (str; default="gray"): (only used if show=True) colormap to use when displaying intensity image
         '''
 
         if mode == "sum":
             im = self.data.sum(axis=2)
+
+            if adjust_intensity:
+                im = np.divide(im, self.numscans/intensity_scale)
+                if illprof:
+                    im = np.divide(im, illprof)
+
         elif mode == "meantau":
-            im = np.mean(self.data, axis=2)
+
+            def avg_time(a):
+                a_tot = np.sum(a)
+                if a_tot == 0:
+                    return np.nan
+                else:
+                    a_norm = np.divide(a, a_tot)
+                    a_x_time = np.multiply(a_norm, self.times)
+                    return np.sum(a_x_time)
+
+            im = np.apply_along_axis(avg_time, 2, self.data)
+
+        else:
+            raise SyntaxError("Unrecognized mode")
 
         if show == True:
             plt.imshow(im,cmap=cmap)
@@ -119,12 +156,11 @@ class SDT(object):
         elif mask == "cells":
             # check to make sure that segmentation is loaded
             if self.iscell is None:
-                print("Error: need to load segmentation.")
-                sys.exit()
+                raise ValueError("Need to load segmentation")
+
             selected_decays = self.data[self.iscell,:]
         else:
-            print("Error: unknown mask type.")
-            sys.exit()
+            raise SyntaxError("Invalid mask type")
 
 
         # combine decays for all selected pixels
@@ -176,8 +212,8 @@ class SDT(object):
     def cell_px_intensities(self, return_all_values=False, print_result=False):
 
         if self.iscell is None:
-            print("Error: need to load segmentation.")
-            sys.exit()
+            raise TypeError("Need to load segmentation.")
+            # sys.exit()
 
         cell_px = self.image()[self.iscell]
 
@@ -233,7 +269,7 @@ def sdt_to_images(
     for i, fn in enumerate(sdt_filenames):
 
         sdt = SDT(fn)
-        im = np.divide(sdt.image(mode=mode), illprof * sdt.numscans / intensity_scale)
+        im = sdt.image(mode=mode, adjust_intensity=(mode=="sum"), illprof=illprof, intensity_scale=intensity_scale)
 
         if flipud: im = np.flipud(im)
         if fliplr: im = np.fliplr(im)
