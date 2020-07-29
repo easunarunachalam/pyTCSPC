@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import os
+from pathlib import Path, PurePath, PureWindowsPath
 
 from scipy.interpolate import interp1d
 from scipy.signal import fftconvolve, convolve
@@ -19,6 +20,8 @@ import sdtfile
 import seaborn as sns
 
 import sys
+
+import time
 
 
 
@@ -32,10 +35,18 @@ class SDT(object):
     block (int; default=0): index of channel to read. To use another channel, create another instance.
     '''
     def __init__(self, filename, block=0):
-        self.filename = filename
-        self.file     = sdtfile.SdtFile(self.filename)
-        self.data     = self.file.data[block]
-        self.times    = self.file.times[block]
+        self.filename              = PurePath(filename)
+        self.parent_dir            = self.filename.parents[0]
+        self.filename_int_raw      = PurePath.joinpath(self.parent_dir, self.filename.stem + "_intensity_raw.tiff")
+        self.filename_int_corr     = PurePath.joinpath(self.parent_dir, self.filename.stem + "_intensity_corr.tiff")
+        self.filename_tau          = PurePath.joinpath(self.parent_dir, self.filename.stem + "_lifetime.tiff")
+        self.filename_str          = str(self.filename)
+        self.filename_int_raw_str  = str(self.filename_int_raw)
+        self.filename_int_corr_str = str(self.filename_int_corr)
+        self.filename_tau_str      = str(self.filename_tau)
+        self.file                  = sdtfile.SdtFile(self.filename_str)
+        self.data                  = self.file.data[block]
+        self.times                 = self.file.times[block]
 
         # size of time bin (in nanoseconds)
         self.dt       = (self.times[1] - self.times[0])*1e9
@@ -48,39 +59,53 @@ class SDT(object):
         self.iscell   = None
 
     def image(
-        self,
-        mode="sum",
-        adjust_intensity=False,
-        illprof=None,
-        intensity_scale=1,
-        show=False,
-        cmap="gray"
+            self,
+            rawsum=True,
+            corrsum=True,
+            meantau=True,
+            adjust_intensity=False,
+            illprof=None,
+            intensity_scale=100,
+            tau_scale=1,
+            flipud=True,
+            fliplr=False
         ):
         '''
         create intensity image by summing photon counts over time for each pixel
 
         Parameters
         ----------
-        mode : {"sum", "meantau"}
-            - "sum": produce intensity image
-            - "meantau": produce mean lifetime image
+        rawsum : bool
+            if True, produce raw intensity image (not correcting for number of frames)
+        corrsum : bool
+            if True, produce corrected intensity image (accounting for number of frames, and the illumination profile if provided)
+        meantau : bool
+            if True, produce mean lifetime image
         adjust_intensity : bool
             adjust intensities according to number of scans and specified intensity scale
         illprof : float or 2-d numpy.ndarray with same x, y dimensions self.data
             illumination profile
-        show (bool; default=False): if True, show the intensity images
-        cmap (str; default="gray"): (only used if show=True) colormap to use when displaying intensity image
         '''
 
-        if mode == "sum":
+        rawsum_img, corrsum_img, meantau_img = None, None, None
+
+        if rawsum or corrsum:
             im = self.data.sum(axis=2)
 
-            if adjust_intensity:
-                im = np.divide(im, self.numscans/intensity_scale)
-                if illprof:
-                    im = np.divide(im, illprof)
+            if flipud: im = np.flipud(im)
+            if fliplr: im = np.fliplr(im)
 
-        elif mode == "meantau":
+            if rawsum:
+                rawsum_img = im.astype("int")
+                cv2.imwrite(self.filename_int_raw_str, rawsum_img)
+
+            if corrsum:
+                im = np.divide(im, self.numscans)
+                if illprof: im = np.divide(im, illprof)
+                corrsum_img = im
+                cv2.imwrite(self.filename_int_corr_str, corrsum_img*intensity_scale)
+
+        if meantau:
 
             def avg_time(a):
                 a_tot = np.sum(a)
@@ -91,14 +116,15 @@ class SDT(object):
                     a_x_time = np.multiply(a_norm, self.times)
                     return np.sum(a_x_time)
 
-            im = np.apply_along_axis(avg_time, 2, self.data)
+            meantau_img = np.apply_along_axis(avg_time, 2, self.data)
+            meantau_img[np.isnan(meantau_img)] = 0
 
-        else:
-            raise SyntaxError("Unrecognized mode")
+            if flipud: meantau_img = np.flipud(meantau_img)
+            if fliplr: meantau_img = np.fliplr(meantau_img)
 
-        if show == True:
-            plt.imshow(im,cmap=cmap)
-        return im
+            cv2.imwrite(self.filename_tau_str, 1e9*meantau_img*tau_scale)
+
+        return rawsum_img, corrsum_img, meantau_img
 
     def hist(self, mode="sum", minval=0, maxval=200, interval=1):
         '''
@@ -159,6 +185,9 @@ class SDT(object):
                 raise ValueError("Need to load segmentation")
 
             selected_decays = self.data[self.iscell,:]
+        elif isinstance(mask, np.ndarray):
+            # add code to make sure dimensions are correct
+            selected_decays = self.data[mask,:]
         else:
             raise SyntaxError("Invalid mask type")
 
@@ -231,14 +260,12 @@ def sdt_to_images(
         exp_folder,
         exclude_folder="!!",
         exclude_name="!!",
-        mode="sum",
         im_save=True,
         im_format="tiff",
         im_folder="",
         illprof=1,
-        intensity_scale=1,
-        flipud=True,
-        fliplr=False,
+        intensity_scale=100,
+        tau_scale=10,
         return_objects=False
     ):
     '''
@@ -262,30 +289,35 @@ def sdt_to_images(
     '''
 
     sdt_filenames = [fn for fn in glob.glob(os.path.join(exp_folder,"**/*.sdt"), recursive=True) if ((exclude_folder not in fn) and (exclude_name not in fn))]
-    print(sdt_filenames)
+
     timeseries    = [None]*len(sdt_filenames)
     sdt_list      = [None]*len(sdt_filenames)
 
+    t0 = time.time()
     for i, fn in enumerate(sdt_filenames):
 
         sdt = SDT(fn)
-        im = sdt.image(mode=mode, adjust_intensity=(mode=="sum"), illprof=illprof, intensity_scale=intensity_scale)
-
-        if flipud: im = np.flipud(im)
-        if fliplr: im = np.fliplr(im)
+        im = sdt.image(
+                    rawsum=im_save,
+                    corrsum=im_save,
+                    meantau=im_save,
+                    adjust_intensity=True,
+                    illprof=illprof,
+                    intensity_scale=intensity_scale,
+                    tau_scale=tau_scale
+                )
 
         timeseries[i] = im
 
         source_folder, filename = fn.rsplit(os.path.sep, maxsplit=1)
 
-        if os.path.isdir(os.path.join(source_folder, im_folder)) == False:
-            os.mkdir(os.path.join(source_folder, im_folder))
-
-        if im_save:
-            cv2.imwrite(os.path.join(source_folder, im_folder, os.path.splitext(filename)[0] + "." + im_format), im)
-
         if return_objects:
             sdt_list[i] = sdt
+
+        t = time.time() - t0
+        print("file {:d}/{:d} | elapsed time = {:3.2f} / {:3.2f} (est.), {:s} ".format(
+            i+1, len(sdt_filenames), t, t*len(sdt_filenames)/(i+1), fn
+            ), end="\r")
 
     if return_objects:
         return sdt_filenames, timeseries, sdt_list
