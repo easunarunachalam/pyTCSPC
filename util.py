@@ -489,3 +489,72 @@ class decay_group:
             ax.set_ylabel(r"counts")
 
         return self.meanandCI
+
+    def fit_twoexp(self, plot=False, ymin=1e-1, ymax=1e4):
+
+        self.params = lmfit.Parameters()
+        self.params.add('tau1'  , value=5    , min=0.001,  max=10.0)
+        self.params.add('tau2'  , value=0.2  , min=0.001,  max=10.0)
+        self.params.add('f'     , value=0.356242895126343  , min=0,      max=1)
+        self.params.add('A'     , value=0.90985567510128021, min=0.90,   max=1.0)
+        self.params.add('shift' , value=9                  , min=-100,   max=+100)
+
+        self.use_t, self.use_data = self.data.time()[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
+        self.fit_weight = np.divide(1., np.sqrt(self.use_data))
+        # out = minimize(residual_oneexp, params, ftol=1e-12, xtol=1e-12, args=(self.use_t, self.use_data, self.fit_weight))
+
+        m = lmfit.Minimizer(self.residual_twoexp, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
+        out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
+        print(out)
+
+        final_vals = out.params.valuesdict()
+        self.final_tau1  = final_vals["tau1"]
+        self.final_tau2  = final_vals["tau2"]
+        self.final_f     = final_vals["f"]
+        self.final_A     = final_vals["A"]
+        self.final_shift = final_vals["shift"]
+
+        for p in out.params:
+            out.params[p].stderr = abs(out.params[p].value * 0.1)
+
+        ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
+        self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
+
+        yhat = self.twoexp_conv_irf(self.use_t, self.final_tau1, self.final_tau2, self.final_f, self.final_A, self.final_shift)
+        scaled_residual = np.divide(self.use_data - yhat, self.use_data)
+        sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.linspace(-0.10,0.10,41))
+        sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
+
+        if plot:
+            fig = plt.figure(constrained_layout=True, figsize=(18,8))
+            w, h = [1, 1], [0.7, 0.3]
+            spec = fig.add_gridspec(nrows=2, ncols=2, width_ratios=w, height_ratios=h)
+
+            datacolor, dataalpha, fitcolor = "cornflowerblue", 0.5, "crimson"
+
+            ax = fig.add_subplot(spec[0,0])
+            ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
+            ax.plot(self.use_t, yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.legend()
+            ax.set_xlabel(r"$t$/ns")
+            ax.set_ylabel(r"counts")
+            ax.set_yscale("log")
+
+            ax = fig.add_subplot(spec[0,1])
+            ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
+            ax.plot(self.use_t, yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.set_xlabel(r"$t$/ns")
+
+            ax = fig.add_subplot(spec[1,0])
+            ax.plot(self.use_t, scaled_residual, color=datacolor, alpha=dataalpha*2)
+            ax.axhline(y=0, color="gray")
+            ax.set_ylim([-0.05,0.05])
+            ax.set_xlabel(r"$t$/ns")
+            ax.set_ylabel(r"scaled residual")
+
+            ax = fig.add_subplot(spec[1,1])
+            ax.bar(sr_bcs, sr_hist, width=sr_bcs[1]-sr_bcs[0], color=datacolor, alpha=dataalpha)
+            ax.set_xlabel(r"scaled residual")
+            ax.set_ylabel(r"counts")
+
+        return self.meanandCI
