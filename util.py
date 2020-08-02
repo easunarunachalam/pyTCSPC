@@ -343,9 +343,19 @@ class decay_group:
         self.dc_irf       = irf.decay_curve(plot=False, normalize=True, trunc=True, bgsub=True)
         self.nbins_irf    = len(self.t_irf)
 
+    def oneexp(self, t, params):
 
+        tau1  = params['tau1']
+        A     = params['A']
+        shift = params['shift']
 
-    def oneexp_conv_irf(self, t, tau1, A, shift):
+        return (1-A) + A*np.exp(-t/tau1)
+
+    def oneexp_conv_irf(self, t, params):
+
+        tau1  = params['tau1']
+        A     = params['A']
+        shift = params['shift']
 
         # number of time bins (IRF time bin size) in a single laser period
         nbins_laser_period = int(self.irf.laser_period()/self.irf.dt)
@@ -353,8 +363,8 @@ class decay_group:
         # time = one laser period
         times     = np.arange(0, self.irf.laser_period(), self.irf.dt)
 
-        # values of biexponential model over this period
-        model     = (1-A) + A*np.exp(-times/tau1)
+        # values of model over this period
+        model     = self.oneexp(times, params)
 
         # duplicate model (add second period)
         dup_model = np.concatenate((model, model))
@@ -378,7 +388,13 @@ class decay_group:
 
         return scaled[t_idx]
 
-    def twoexp_conv_irf(self, t, tau1, tau2, f, A, shift):
+    def twoexp_conv_irf(self, t, params):
+
+        tau1  = params['tau1']
+        tau2  = params['tau2']
+        f     = params['f']
+        A     = params['A']
+        shift = params['shift']
 
         # number of time bins (IRF time bin size) in a single laser period
         nbins_laser_period = int(self.irf.laser_period()/self.irf.dt)
@@ -414,20 +430,10 @@ class decay_group:
         return scaled[t_idx]
 
     def residual_oneexp(self, params):
-        tau1  = params['tau1']
-        A     = params['A']
-        shift = params['shift']
-
-        return np.multiply(self.oneexp_conv_irf(self.use_t, tau1, A, shift) - self.use_data, self.fit_weight)
+        return np.multiply(self.oneexp_conv_irf(self.use_t, params) - self.use_data, self.fit_weight)
 
     def residual_twoexp(self, params):
-        tau1  = params['tau1']
-        tau2  = params['tau2']
-        f     = params['f']
-        A     = params['A']
-        shift = params['shift']
-
-        return np.multiply(self.twoexp_conv_irf(self.use_t, tau1, tau2, f, A, shift) - self.use_data, self.fit_weight)
+        return np.multiply(self.twoexp_conv_irf(self.use_t, params) - self.use_data, self.fit_weight)
 
     def fit_oneexp(self, plot=False, ymin=1e-1, ymax=1e4):
 
@@ -443,10 +449,10 @@ class decay_group:
         m = lmfit.Minimizer(self.residual_oneexp, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
         out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
 
-        final_vals = out.params.valuesdict()
-        self.final_tau1  = final_vals["tau1"]
-        self.final_A     = final_vals["A"]
-        self.final_shift = final_vals["shift"]
+        self.final_vals = out.params.valuesdict()
+        self.final_tau1  = self.final_vals["tau1"]
+        self.final_A     = self.final_vals["A"]
+        self.final_shift = self.final_vals["shift"]
 
         for p in out.params:
             out.params[p].stderr = abs(out.params[p].value * 0.1)
@@ -454,7 +460,7 @@ class decay_group:
         ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
         self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
 
-        self.final_yhat = self.oneexp_conv_irf(self.use_t, self.final_tau1, self.final_A, self.final_shift)
+        self.final_yhat = self.oneexp_conv_irf(self.use_t, self.final_vals)
         scaled_residual = np.divide(self.use_data - self.final_yhat, self.use_data)
         sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.linspace(-0.10,0.10,41))
         sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
@@ -508,14 +514,13 @@ class decay_group:
 
         m = lmfit.Minimizer(self.residual_twoexp, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
         out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
-        print(out)
 
-        final_vals = out.params.valuesdict()
-        self.final_tau1  = final_vals["tau1"]
-        self.final_tau2  = final_vals["tau2"]
-        self.final_f     = final_vals["f"]
-        self.final_A     = final_vals["A"]
-        self.final_shift = final_vals["shift"]
+        self.final_vals = out.params.valuesdict()
+        self.final_tau1  = self.final_vals["tau1"]
+        self.final_tau2  = self.final_vals["tau2"]
+        self.final_f     = self.final_vals["f"]
+        self.final_A     = self.final_vals["A"]
+        self.final_shift = self.final_vals["shift"]
 
         for p in out.params:
             out.params[p].stderr = abs(out.params[p].value * 0.1)
@@ -523,7 +528,7 @@ class decay_group:
         ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
         self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
 
-        self.final_yhat = self.twoexp_conv_irf(self.use_t, self.final_tau1, self.final_tau2, self.final_f, self.final_A, self.final_shift)
+        self.final_yhat = self.twoexp_conv_irf(self.use_t, self.final_vals)
         scaled_residual = np.divide(self.use_data - self.final_yhat, self.use_data)
         sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.linspace(-0.10,0.10,41))
         sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
