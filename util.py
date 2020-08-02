@@ -34,7 +34,13 @@ class SDT(object):
     filename (str): name of .sdt file to read in
     block (int; default=0): index of channel to read. To use another channel, create another instance.
     '''
-    def __init__(self, filename, block=0):
+    def __init__(
+        self,
+        filename,
+        block=0,
+        flipud=True,
+        fliplr=False
+    ):
         self.filename              = PurePath(filename)
         self.parent_dir            = self.filename.parents[0]
         self.filename_int_raw      = PurePath.joinpath(self.parent_dir, self.filename.stem + "_intensity_raw.tiff")
@@ -55,6 +61,10 @@ class SDT(object):
         # number of frames in exposure (should be an integer)
         self.numscans = self.file.measure_info[0].MeasHISTInfo.fida_points[0]
 
+
+        if flipud: self.data = np.flipud(self.data)
+        if fliplr: self.data = np.fliplr(self.data)
+
         # (optional) store a mask indicating which pixels correspond to cells
         self.iscell   = None
 
@@ -62,13 +72,11 @@ class SDT(object):
             self,
             rawsum=True,
             corrsum=True,
-            meantau=True,
+            meantau=False,
             adjust_intensity=False,
             illprof=None,
             intensity_scale=100,
-            tau_scale=1,
-            flipud=True,
-            fliplr=False
+            tau_scale=1
         ):
         '''
         create intensity image by summing photon counts over time for each pixel
@@ -91,9 +99,6 @@ class SDT(object):
 
         if rawsum or corrsum:
             im = self.data.sum(axis=2)
-
-            if flipud: im = np.flipud(im)
-            if fliplr: im = np.fliplr(im)
 
             if rawsum:
                 rawsum_img = im.astype("int")
@@ -118,9 +123,6 @@ class SDT(object):
 
             meantau_img = np.apply_along_axis(avg_time, 2, self.data)
             meantau_img[np.isnan(meantau_img)] = 0
-
-            if flipud: meantau_img = np.flipud(meantau_img)
-            if fliplr: meantau_img = np.fliplr(meantau_img)
 
             cv2.imwrite(self.filename_tau_str, 1e9*meantau_img*tau_scale)
 
@@ -300,7 +302,7 @@ def sdt_to_images(
         im = sdt.image(
                     rawsum=im_save,
                     corrsum=im_save,
-                    meantau=im_save,
+                    meantau=False,
                     adjust_intensity=True,
                     illprof=illprof,
                     intensity_scale=intensity_scale,
@@ -315,7 +317,7 @@ def sdt_to_images(
             sdt_list[i] = sdt
 
         t = time.time() - t0
-        print("file {:d}/{:d} | elapsed time = {:3.2f} / {:3.2f} (est.), {:s} ".format(
+        print("file {:d}/{:d} | elapsed time = {:3.2f} / {:3.2f} (est.) | last file: {:s} ".format(
             i+1, len(sdt_filenames), t, t*len(sdt_filenames)/(i+1), fn
             ), end="\r")
 
@@ -326,20 +328,21 @@ def sdt_to_images(
 
 class decay_group:
 
-    def __init__(self, data, irf, start_bin=11, end_bin=237):
+    def __init__(self, data, irf, mask=None, start_bin=11, end_bin=237):
 
         self.start_bin    = start_bin
         self.end_bin      = end_bin
 
         self.data         = data
         self.t_data       = data.time(units="ns")
-        self.dc_data      = data.decay_curve(plot=False, normalize=False)
+        self.dc_data      = data.decay_curve(plot=False, normalize=False, mask=mask)
         self.nbins_data   = len(self.t_data)
 
         self.irf          = irf
         self.t_irf        = irf.time(units="ns")
         self.dc_irf       = irf.decay_curve(plot=False, normalize=True, trunc=True, bgsub=True)
         self.nbins_irf    = len(self.t_irf)
+
 
 
     def oneexp_conv_irf(self, t, tau1, A, shift):
@@ -451,8 +454,8 @@ class decay_group:
         ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
         self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
 
-        yhat = self.oneexp_conv_irf(self.use_t, self.final_tau1, self.final_A, self.final_shift)
-        scaled_residual = np.divide(self.use_data - yhat, self.use_data)
+        self.final_yhat = self.oneexp_conv_irf(self.use_t, self.final_tau1, self.final_A, self.final_shift)
+        scaled_residual = np.divide(self.use_data - self.final_yhat, self.use_data)
         sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.linspace(-0.10,0.10,41))
         sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
 
@@ -465,7 +468,7 @@ class decay_group:
 
             ax = fig.add_subplot(spec[0,0])
             ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
-            ax.plot(self.use_t, yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
             ax.legend()
             ax.set_xlabel(r"$t$/ns")
             ax.set_ylabel(r"counts")
@@ -473,7 +476,7 @@ class decay_group:
 
             ax = fig.add_subplot(spec[0,1])
             ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
-            ax.plot(self.use_t, yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
             ax.set_xlabel(r"$t$/ns")
 
             ax = fig.add_subplot(spec[1,0])
@@ -493,11 +496,11 @@ class decay_group:
     def fit_twoexp(self, plot=False, ymin=1e-1, ymax=1e4):
 
         self.params = lmfit.Parameters()
-        self.params.add('tau1'  , value=5    , min=0.001,  max=10.0)
-        self.params.add('tau2'  , value=0.2  , min=0.001,  max=10.0)
-        self.params.add('f'     , value=0.356242895126343  , min=0,      max=1)
-        self.params.add('A'     , value=0.90985567510128021, min=0.90,   max=1.0)
-        self.params.add('shift' , value=9                  , min=-100,   max=+100)
+        self.params.add('tau1'  , value=2.53  , min=0.001,  max=10.0)
+        self.params.add('tau2'  , value=0.24  , min=0.001,  max=10.0)
+        self.params.add('f'     , value=0.27  , min=0,      max=1)
+        self.params.add('A'     , value=0.98  , min=0.90,   max=1.0)
+        self.params.add('shift' , value=6     , min=-100,   max=+100)
 
         self.use_t, self.use_data = self.data.time()[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
         self.fit_weight = np.divide(1., np.sqrt(self.use_data))
@@ -520,8 +523,8 @@ class decay_group:
         ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
         self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
 
-        yhat = self.twoexp_conv_irf(self.use_t, self.final_tau1, self.final_tau2, self.final_f, self.final_A, self.final_shift)
-        scaled_residual = np.divide(self.use_data - yhat, self.use_data)
+        self.final_yhat = self.twoexp_conv_irf(self.use_t, self.final_tau1, self.final_tau2, self.final_f, self.final_A, self.final_shift)
+        scaled_residual = np.divide(self.use_data - self.final_yhat, self.use_data)
         sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.linspace(-0.10,0.10,41))
         sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
 
@@ -534,7 +537,7 @@ class decay_group:
 
             ax = fig.add_subplot(spec[0,0])
             ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
-            ax.plot(self.use_t, yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
             ax.legend()
             ax.set_xlabel(r"$t$/ns")
             ax.set_ylabel(r"counts")
@@ -542,7 +545,7 @@ class decay_group:
 
             ax = fig.add_subplot(spec[0,1])
             ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
-            ax.plot(self.use_t, yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
             ax.set_xlabel(r"$t$/ns")
 
             ax = fig.add_subplot(spec[1,0])
@@ -557,4 +560,4 @@ class decay_group:
             ax.set_xlabel(r"scaled residual")
             ax.set_ylabel(r"counts")
 
-        return self.meanandCI
+        return self.meanandCI, (self.use_t, self.final_yhat)
