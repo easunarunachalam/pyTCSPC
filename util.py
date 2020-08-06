@@ -328,7 +328,7 @@ def sdt_to_images(
 
 class decay_group:
 
-    def __init__(self, data, irf, mask=None, start_bin=11, end_bin=237):
+    def __init__(self, data, irf, mask=None, start_bin=11, end_bin=237, modeltype="twoexp"):
 
         self.start_bin    = start_bin
         self.end_bin      = end_bin
@@ -343,6 +343,22 @@ class decay_group:
         self.dc_irf       = irf.decay_curve(plot=False, normalize=True, trunc=True, bgsub=True)
         self.nbins_irf    = len(self.t_irf)
 
+        self.modeltype    = modeltype
+
+        self.params       = lmfit.Parameters()
+
+        if self.modeltype is "oneexp":
+            self.params.add('tau1'  , value=4.356242895126343  , min=0.001,  max=10.0)
+            self.params.add('A'     , value=0.90985567510128021, min=0.90, max=1.0)
+            self.params.add('shift' , value=9                  , min=-100, max=+100)
+        elif self.modeltype is "twoexp":
+            self.params.add('tau1'  , value=2.53  , min=0.001,  max=10.0)
+            self.params.add('tau2'  , value=0.24  , min=0.001,  max=10.0)
+            self.params.add('f'     , value=0.27  , min=0,      max=1)
+            self.params.add('A'     , value=0.98  , min=0.90,   max=1.0)
+            self.params.add('shift' , value=6     , min=-100,   max=+100)
+
+
     def oneexp(self, t, params):
 
         tau1  = params['tau1']
@@ -351,11 +367,17 @@ class decay_group:
 
         return (1-A) + A*np.exp(-t/tau1)
 
-    def oneexp_conv_irf(self, t, params):
+    def twoexp(self, t, params):
 
         tau1  = params['tau1']
+        tau2  = params['tau2']
+        f     = params['f']
         A     = params['A']
         shift = params['shift']
+
+        return (1-A) + A*(f*np.exp(-t/tau1) + (1-f)*np.exp(-t/tau2))
+
+    def model_conv_irf(self, t, params):
 
         # number of time bins (IRF time bin size) in a single laser period
         nbins_laser_period = int(self.irf.laser_period()/self.irf.dt)
@@ -364,13 +386,16 @@ class decay_group:
         times     = np.arange(0, self.irf.laser_period(), self.irf.dt)
 
         # values of model over this period
-        model     = self.oneexp(times, params)
+        if self.modeltype is "oneexp":
+            model     = self.oneexp(times, params)
+        elif self.modeltype is "twoexp":
+            model     = self.twoexp(times, params)
 
         # duplicate model (add second period)
         dup_model = np.concatenate((model, model))
 
         # convolve model with IRF
-        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
+        roll_irf  = np.roll(self.dc_irf, int(np.round(params["shift"])))
         cnv       = fftconvolve(roll_irf, dup_model, mode="full")*self.irf.dt
 
         # keep the second period of the convolution
@@ -388,71 +413,18 @@ class decay_group:
 
         return scaled[t_idx]
 
-    def twoexp_conv_irf(self, t, params):
+    def residual(self, params):
+        return np.multiply(self.model_conv_irf(self.use_t, params) - self.use_data, self.fit_weight)
 
-        tau1  = params['tau1']
-        tau2  = params['tau2']
-        f     = params['f']
-        A     = params['A']
-        shift = params['shift']
-
-        # number of time bins (IRF time bin size) in a single laser period
-        nbins_laser_period = int(self.irf.laser_period()/self.irf.dt)
-
-        # time = one laser period
-        times     = np.arange(0, self.irf.laser_period(), self.irf.dt)
-
-        # values of biexponential model over this period
-        model     = (1-A) + A*(
-            f*np.exp(-times/tau1) + (1-f)*np.exp(-times/tau2)
-        )
-
-        # duplicate model (add second period)
-        dup_model = np.concatenate((model, model))
-
-        # convolve model with IRF
-        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
-        cnv       = fftconvolve(roll_irf, dup_model, mode="full")*self.irf.dt
-
-        # keep the second period of the convolution
-        p2        = cnv[nbins_laser_period+1:nbins_laser_period+1+self.nbins_irf]
-
-        # collapse down to the same number of bins as the data
-        rshp      = np.sum(np.reshape(p2, (self.nbins_data, len(p2)//self.nbins_data)), axis=1)
-
-        # scale by total number of photons (in data) within time range of interest
-        counts    = np.sum(self.dc_data[self.start_bin:(self.end_bin+1)])
-        scaled    = counts*rshp/np.sum(rshp[self.start_bin:(self.end_bin+1)])
-
-        # indices of requested times (first argument)
-        t_idx     = np.round(np.divide(t, self.data.dt)).astype(int) - 1
-
-        return scaled[t_idx]
-
-    def residual_oneexp(self, params):
-        return np.multiply(self.oneexp_conv_irf(self.use_t, params) - self.use_data, self.fit_weight)
-
-    def residual_twoexp(self, params):
-        return np.multiply(self.twoexp_conv_irf(self.use_t, params) - self.use_data, self.fit_weight)
-
-    def fit_oneexp(self, plot=False, ymin=1e-1, ymax=1e4):
-
-        self.params = lmfit.Parameters()
-        self.params.add('tau1'  , value=4.356242895126343  , min=0.001,  max=10.0)
-        self.params.add('A'     , value=0.90985567510128021, min=0.90, max=1.0)
-        self.params.add('shift' , value=9                  , min=-100, max=+100)
+    def fit(self, plot=False, ymin=1e-1, ymax=1e4):
 
         self.use_t, self.use_data = self.data.time()[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
         self.fit_weight = np.divide(1., np.sqrt(self.use_data))
-        # out = minimize(residual_oneexp, params, ftol=1e-12, xtol=1e-12, args=(self.use_t, self.use_data, self.fit_weight))
 
-        m = lmfit.Minimizer(self.residual_oneexp, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
+        m = lmfit.Minimizer(self.residual, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
         out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
 
         self.final_vals = out.params.valuesdict()
-        self.final_tau1  = self.final_vals["tau1"]
-        self.final_A     = self.final_vals["A"]
-        self.final_shift = self.final_vals["shift"]
 
         for p in out.params:
             out.params[p].stderr = abs(out.params[p].value * 0.1)
@@ -460,13 +432,13 @@ class decay_group:
         ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
         self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
 
-        self.final_yhat = self.oneexp_conv_irf(self.use_t, self.final_vals)
-        scaled_residual = np.divide(self.use_data - self.final_yhat, self.use_data)
-        sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.linspace(-0.10,0.10,41))
+        self.final_yhat = self.model_conv_irf(self.use_t, self.final_vals)
+        scaled_residual = np.divide(self.use_data - self.final_yhat, np.sqrt(self.use_data))
+        sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.arange(-6,6,0.5*2))
         sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
 
         if plot:
-            fig = plt.figure(constrained_layout=True, figsize=(18,8))
+            fig = plt.figure(constrained_layout=True, figsize=(18,6))
             w, h = [1, 1], [0.7, 0.3]
             spec = fig.add_gridspec(nrows=2, ncols=2, width_ratios=w, height_ratios=h)
 
@@ -488,75 +460,7 @@ class decay_group:
             ax = fig.add_subplot(spec[1,0])
             ax.plot(self.use_t, scaled_residual, color=datacolor, alpha=dataalpha*2)
             ax.axhline(y=0, color="gray")
-            ax.set_ylim([-0.05,0.05])
-            ax.set_xlabel(r"$t$/ns")
-            ax.set_ylabel(r"scaled residual")
-
-            ax = fig.add_subplot(spec[1,1])
-            ax.bar(sr_bcs, sr_hist, width=sr_bcs[1]-sr_bcs[0], color=datacolor, alpha=dataalpha)
-            ax.set_xlabel(r"scaled residual")
-            ax.set_ylabel(r"counts")
-
-        return self.meanandCI
-
-    def fit_twoexp(self, plot=False, ymin=1e-1, ymax=1e4):
-
-        self.params = lmfit.Parameters()
-        self.params.add('tau1'  , value=2.53  , min=0.001,  max=10.0)
-        self.params.add('tau2'  , value=0.24  , min=0.001,  max=10.0)
-        self.params.add('f'     , value=0.27  , min=0,      max=1)
-        self.params.add('A'     , value=0.98  , min=0.90,   max=1.0)
-        self.params.add('shift' , value=6     , min=-100,   max=+100)
-
-        self.use_t, self.use_data = self.data.time()[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
-        self.fit_weight = np.divide(1., np.sqrt(self.use_data))
-        # out = minimize(residual_oneexp, params, ftol=1e-12, xtol=1e-12, args=(self.use_t, self.use_data, self.fit_weight))
-
-        m = lmfit.Minimizer(self.residual_twoexp, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
-        out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
-
-        self.final_vals = out.params.valuesdict()
-        self.final_tau1  = self.final_vals["tau1"]
-        self.final_tau2  = self.final_vals["tau2"]
-        self.final_f     = self.final_vals["f"]
-        self.final_A     = self.final_vals["A"]
-        self.final_shift = self.final_vals["shift"]
-
-        for p in out.params:
-            out.params[p].stderr = abs(out.params[p].value * 0.1)
-
-        ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
-        self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
-
-        self.final_yhat = self.twoexp_conv_irf(self.use_t, self.final_vals)
-        scaled_residual = np.divide(self.use_data - self.final_yhat, self.use_data)
-        sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.linspace(-0.10,0.10,41))
-        sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
-
-        if plot:
-            fig = plt.figure(constrained_layout=True, figsize=(18,8))
-            w, h = [1, 1], [0.7, 0.3]
-            spec = fig.add_gridspec(nrows=2, ncols=2, width_ratios=w, height_ratios=h)
-
-            datacolor, dataalpha, fitcolor = "cornflowerblue", 0.5, "crimson"
-
-            ax = fig.add_subplot(spec[0,0])
-            ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
-            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
-            ax.legend()
-            ax.set_xlabel(r"$t$/ns")
-            ax.set_ylabel(r"counts")
-            ax.set_yscale("log")
-
-            ax = fig.add_subplot(spec[0,1])
-            ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
-            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
-            ax.set_xlabel(r"$t$/ns")
-
-            ax = fig.add_subplot(spec[1,0])
-            ax.plot(self.use_t, scaled_residual, color=datacolor, alpha=dataalpha*2)
-            ax.axhline(y=0, color="gray")
-            ax.set_ylim([-0.05,0.05])
+            # ax.set_ylim([-0.05,0.05])
             ax.set_xlabel(r"$t$/ns")
             ax.set_ylabel(r"scaled residual")
 
