@@ -68,6 +68,11 @@ class SDT(object):
         # (optional) store a mask indicating which pixels correspond to cells
         self.iscell   = None
 
+    def __add__(self, other):
+        self.data += other.data
+
+        return self
+
     def image(
             self,
             rawsum=True,
@@ -106,7 +111,8 @@ class SDT(object):
 
             if corrsum:
                 im = np.divide(im, self.numscans)
-                if illprof: im = np.divide(im, illprof)
+                if isinstance(illprof, np.ndarray) or isinstance(illprof, float) or isinstance(illprof, int):
+                    im = np.divide(im, illprof)
                 corrsum_img = im
                 cv2.imwrite(self.filename_int_corr_str, corrsum_img*intensity_scale)
 
@@ -181,15 +187,15 @@ class SDT(object):
 
         if mask is None:
             selected_decays = self.data
+        elif isinstance(mask, np.ndarray):
+            # add code to make sure dimensions are correct
+            selected_decays = self.data[mask,:]
         elif mask == "cells":
             # check to make sure that segmentation is loaded
             if self.iscell is None:
                 raise ValueError("Need to load segmentation")
 
             selected_decays = self.data[self.iscell,:]
-        elif isinstance(mask, np.ndarray):
-            # add code to make sure dimensions are correct
-            selected_decays = self.data[mask,:]
         else:
             raise SyntaxError("Invalid mask type")
 
@@ -318,7 +324,7 @@ def sdt_to_images(
 
         t = time.time() - t0
         print("file {:d}/{:d} | elapsed time = {:3.2f} / {:3.2f} (est.) | last file: {:s} ".format(
-            i+1, len(sdt_filenames), t, t*len(sdt_filenames)/(i+1), fn
+                i+1, len(sdt_filenames), t, t*len(sdt_filenames)/(i+1), fn
             ), end="\r")
 
     if return_objects:
@@ -356,7 +362,7 @@ class decay_group:
             self.params.add('tau2'  , value=0.24  , min=0.001,  max=10.0)
             self.params.add('f'     , value=0.27  , min=0,      max=1)
             self.params.add('A'     , value=0.98  , min=0.90,   max=1.0)
-            self.params.add('shift' , value=6     , min=-100,   max=+100)
+            self.params.add('shift' , value=12     , min=-100,   max=+100)
 
 
     def oneexp(self, t, params):
@@ -397,6 +403,7 @@ class decay_group:
         # convolve model with IRF
         roll_irf  = np.roll(self.dc_irf, int(np.round(params["shift"])))
         cnv       = fftconvolve(roll_irf, dup_model, mode="full")*self.irf.dt
+        # cnv       = fftconvolve(self.dc_irf, dup_model, mode="full")*self.irf.dt
 
         # keep the second period of the convolution
         p2        = cnv[nbins_laser_period+1:nbins_laser_period+1+self.nbins_irf]
@@ -411,18 +418,40 @@ class decay_group:
         # indices of requested times (first argument)
         t_idx     = np.round(np.divide(t, self.data.dt)).astype(int) - 1
 
+        # print(scaled)
         return scaled[t_idx]
 
     def residual(self, params):
         return np.multiply(self.model_conv_irf(self.use_t, params) - self.use_data, self.fit_weight)
 
-    def fit(self, plot=False, ymin=1e-1, ymax=1e4):
+    def fit(
+            self,
+            method="leastsq",
+            plot=False,
+            datacolor="cornflowerblue",
+            dataalpha=0.5,
+            fitcolor="crimson"
+        ):
 
         self.use_t, self.use_data = self.data.time()[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
         self.fit_weight = np.divide(1., np.sqrt(self.use_data))
+        self.fit_weight[np.isinf(self.fit_weight)] = 0
+        # self.fit_weight[np.isnan(self.fit_weight)] = 0
 
+
+        # print(self.use_data)
+        # print(self.fit_weight)
         m = lmfit.Minimizer(self.residual, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
-        out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
+
+        if method is "leastsq":
+            out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
+        elif method is "emcee":
+            out = m.minimize(method="emcee", burn=2000, steps=3000)
+        elif method is "nelder":
+            out = m.minimize(method="nelder")
+        else:
+            out = m.minimize(method=method)
+            # raise SyntaxError("Unrecognized method. Available methods are `leastsq` and `emcee`.")
 
         self.final_vals = out.params.valuesdict()
 
@@ -434,15 +463,13 @@ class decay_group:
 
         self.final_yhat = self.model_conv_irf(self.use_t, self.final_vals)
         scaled_residual = np.divide(self.use_data - self.final_yhat, np.sqrt(self.use_data))
-        sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.arange(-6,6,0.5*2))
+        sr_hist, sr_bes = np.histogram(scaled_residual, bins=np.arange(-10,10,0.5))
         sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
 
         if plot:
             fig = plt.figure(constrained_layout=True, figsize=(18,6))
             w, h = [1, 1], [0.7, 0.3]
             spec = fig.add_gridspec(nrows=2, ncols=2, width_ratios=w, height_ratios=h)
-
-            datacolor, dataalpha, fitcolor = "cornflowerblue", 0.5, "crimson"
 
             ax = fig.add_subplot(spec[0,0])
             ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
@@ -468,5 +495,6 @@ class decay_group:
             ax.bar(sr_bcs, sr_hist, width=sr_bcs[1]-sr_bcs[0], color=datacolor, alpha=dataalpha)
             ax.set_xlabel(r"scaled residual")
             ax.set_ylabel(r"counts")
+            plt.show()
 
         return self.meanandCI, (self.use_t, self.final_yhat)
