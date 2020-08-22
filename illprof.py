@@ -8,11 +8,15 @@ from skimage.morphology import watershed, disk
 from colorbar import colorbar
 
 
-def smooth_illprof(intensity_illprof, plot=False, saveplot=False):
-    intensity_illprof_scaled = np.uint8((2**8)**np.divide(intensity_illprof, np.max(intensity_illprof)))
+def smooth_illprof(intensity_illprof, rescale=None, plot=False, saveplot=False):
+
+    if rescale:
+        intensity_illprof_rescaled = rescale(intensity_illprof, 2, anti_aliasing=False)
+
+    intensity_illprof_scaled = np.uint8((2**8)**np.divide(intensity_illprof_rescaled, np.max(intensity_illprof_rescaled)))
+
     blur_median = rank.median(intensity_illprof_scaled, selem=disk(6))*1e4
     blur_gaussian = gaussian(blur_median, sigma=15)*1e4
-    # blur_gaussian = gaussian(intensity_illprof_scaled, sigma=15)*1e4
 
     blur = blur_gaussian
     blur = np.divide(blur, np.max(blur))
