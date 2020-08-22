@@ -187,15 +187,19 @@ class SDT(object):
 
         if mask is None:
             selected_decays = self.data
+            dims = self.data.shape
+            self.npx = dims[0]*dims[1]
         elif isinstance(mask, np.ndarray):
             # add code to make sure dimensions are correct
             selected_decays = self.data[mask,:]
+            self.npx = np.sum(mask)
         elif mask == "cells":
             # check to make sure that segmentation is loaded
             if self.iscell is None:
                 raise ValueError("Need to load segmentation")
 
             selected_decays = self.data[self.iscell,:]
+            self.npx = np.sum(self.iscell)
         else:
             raise SyntaxError("Invalid mask type")
 
@@ -274,7 +278,8 @@ def sdt_to_images(
         illprof=1,
         intensity_scale=100,
         tau_scale=10,
-        return_objects=False
+        return_objects=False,
+        only_first_n=None
     ):
     '''
     generate intensity images from all sdt files
@@ -327,6 +332,9 @@ def sdt_to_images(
                 i+1, len(sdt_filenames), t, t*len(sdt_filenames)/(i+1), fn
             ), end="\r")
 
+        if only_first_n and (i+1)>=only_first_n:
+            break
+
     if return_objects:
         return sdt_filenames, timeseries, sdt_list
     else:
@@ -343,11 +351,14 @@ class decay_group:
         self.t_data       = data.time(units="ns")
         self.dc_data      = data.decay_curve(plot=False, normalize=False, mask=mask)
         self.nbins_data   = len(self.t_data)
+        self.nphot_data   = np.sum(self.dc_data)
+        self.intensity    = self.nphot_data / self.data.npx
 
         self.irf          = irf
         self.t_irf        = irf.time(units="ns")
         self.dc_irf       = irf.decay_curve(plot=False, normalize=True, trunc=True, bgsub=True)
         self.nbins_irf    = len(self.t_irf)
+        self.nphot_irf    = np.sum(self.dc_irf)
 
         self.modeltype    = modeltype
 
@@ -363,7 +374,6 @@ class decay_group:
             self.params.add('f'     , value=0.27  , min=0,      max=1)
             self.params.add('A'     , value=0.98  , min=0.90,   max=1.0)
             self.params.add('shift' , value=12     , min=-100,   max=+100)
-
 
     def oneexp(self, t, params):
 
@@ -436,30 +446,41 @@ class decay_group:
         self.use_t, self.use_data = self.data.time()[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
         self.fit_weight = np.divide(1., np.sqrt(self.use_data))
         self.fit_weight[np.isinf(self.fit_weight)] = 0
-        # self.fit_weight[np.isnan(self.fit_weight)] = 0
 
-
-        # print(self.use_data)
-        # print(self.fit_weight)
         m = lmfit.Minimizer(self.residual, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
 
         if method is "leastsq":
             out = m.minimize(ftol=1e-12, xtol=1e-12, method="leastsq")
+
         elif method is "emcee":
+
+            out = m.minimize(method="dual_annealing")
+            self.final_vals = out.params.valuesdict()
+            for key in self.params.keys():
+                self.params[str(key)].value = self.final_vals[str(key)]
+
             out = m.minimize(method="emcee", burn=2000, steps=3000)
-        elif method is "nelder":
-            out = m.minimize(method="nelder")
+
         else:
             out = m.minimize(method=method)
             # raise SyntaxError("Unrecognized method. Available methods are `leastsq` and `emcee`.")
 
         self.final_vals = out.params.valuesdict()
 
+        # need to initialize std err value
         for p in out.params:
-            out.params[p].stderr = abs(out.params[p].value * 0.1)
+            out.params[p].stderr = abs(out.params[p].value * 1e-1)
 
-        ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
-        self.meanandCI = [(ci[str(key)][2][1], ci[str(key)][0][1], ci[str(key)][-1][1]) for key in ci.keys()]
+        self.ci = lmfit.conf_interval(m, out, sigmas=[1, 2])
+        self.meanandCI = np.array([[self.ci[str(key)][2][1], self.ci[str(key)][0][1], self.ci[str(key)][-1][1]] for key in self.ci.keys()])
+
+        if self.modeltype is "twoexp":
+
+            # [print(key) for key in self.ci.keys()]
+            tau1, tau2, f, A, shift = self.meanandCI[0], self.meanandCI[1], self.meanandCI[2], self.meanandCI[3], self.meanandCI[4]
+
+            if tau1[0] > tau2[0]: self.meanandCI = np.array([tau1, tau2, f, A, shift])
+            if tau1[0] < tau2[0]: self.meanandCI = np.array([tau2, tau1, 1-f, A, shift])
 
         self.final_yhat = self.model_conv_irf(self.use_t, self.final_vals)
         scaled_residual = np.divide(self.use_data - self.final_yhat, np.sqrt(self.use_data))
