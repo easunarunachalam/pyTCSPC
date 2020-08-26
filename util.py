@@ -1,5 +1,7 @@
 import cv2
 
+from datetime import datetime
+
 import glob
 
 # from lmfit import minimize, conf_interval, Parameters, Minimizer, fit_report
@@ -43,6 +45,7 @@ class SDT(object):
     ):
         self.filename              = PurePath(filename)
         self.parent_dir            = self.filename.parents[0]
+
         self.filename_int_raw      = PurePath.joinpath(self.parent_dir, self.filename.stem + "_intensity_raw.tiff")
         self.filename_int_corr     = PurePath.joinpath(self.parent_dir, self.filename.stem + "_intensity_corr.tiff")
         self.filename_tau          = PurePath.joinpath(self.parent_dir, self.filename.stem + "_lifetime.tiff")
@@ -50,9 +53,11 @@ class SDT(object):
         self.filename_int_raw_str  = str(self.filename_int_raw)
         self.filename_int_corr_str = str(self.filename_int_corr)
         self.filename_tau_str      = str(self.filename_tau)
+
         self.file                  = sdtfile.SdtFile(self.filename_str)
         self.data                  = self.file.data[block]
         self.times                 = self.file.times[block]
+        self.get_acqtime()
 
         # size of time bin (in nanoseconds)
         self.dt       = (self.times[1] - self.times[0])*1e9
@@ -67,6 +72,17 @@ class SDT(object):
 
         # (optional) store a mask indicating which pixels correspond to cells
         self.iscell   = None
+
+    def get_acqtime(self):
+        '''
+        get acquisition time (wall clock time) for SDT
+        '''
+        info_lines   = self.file.info.split("\n")
+        hhmmss_str   = [i.split(":") for i in info_lines if i.startswith('  Time')][0][1:]
+        hhmmss       = [int(j) for j in hhmmss_str]
+        yyyymmdd_str = [i.split(":") for i in info_lines if i.startswith('  Date')][0][1]
+        yyyymmdd     = [int(i) for i in yyyymmdd_str.split("-")]
+        self.acqtime = datetime(yyyymmdd[0], yyyymmdd[1], yyyymmdd[2], hhmmss[0], hhmmss[1], hhmmss[2])
 
     def __add__(self, other):
         self.data += other.data
@@ -306,8 +322,19 @@ def sdt_to_images(
     timeseries    = [None]*len(sdt_filenames)
     sdt_list      = [None]*len(sdt_filenames)
 
+    clearline = 120*" "
+
     t0 = time.time()
     for i, fn in enumerate(sdt_filenames):
+
+        t = time.time() - t0
+        if i == 0:
+            est_time = 0
+        else:
+            est_time = t*len(sdt_filenames)/(i)
+        print("file {:d}/{:d} | elapsed time = {:3.2f} / {:3.2f} (est.) | current file: {:s} ".format(
+                i+1, len(sdt_filenames), t, est_time, fn
+            ) + clearline, end="\r")
 
         sdt = SDT(fn)
         im = sdt.image(
@@ -327,13 +354,11 @@ def sdt_to_images(
         if return_objects:
             sdt_list[i] = sdt
 
-        t = time.time() - t0
-        print("file {:d}/{:d} | elapsed time = {:3.2f} / {:3.2f} (est.) | last file: {:s} ".format(
-                i+1, len(sdt_filenames), t, t*len(sdt_filenames)/(i+1), fn
-            ), end="\r")
-
         if only_first_n and (i+1)>=only_first_n:
             break
+
+    t = time.time() - t0
+    print(clearline + "\r{:d} files converted | elapsed time = {:3.2f}".format(i+1, t) + clearline, end="\n")
 
     if return_objects:
         return sdt_filenames, timeseries, sdt_list
@@ -479,8 +504,11 @@ class decay_group:
             # [print(key) for key in self.ci.keys()]
             tau1, tau2, f, A, shift = self.meanandCI[0], self.meanandCI[1], self.meanandCI[2], self.meanandCI[3], self.meanandCI[4]
 
-            if tau1[0] > tau2[0]: self.meanandCI = np.array([tau1, tau2, f, A, shift])
-            if tau1[0] < tau2[0]: self.meanandCI = np.array([tau2, tau1, 1-f, A, shift])
+            if tau1[0] > tau2[0]:
+                self.meanandCI = np.array([tau1, tau2, f, A, shift])
+            if tau1[0] < tau2[0]:
+                self.meanandCI = np.array([tau2, tau1, 1-f, A, shift])
+                self.meanandCI[2] = np.array([self.meanandCI[2][0], self.meanandCI[2][2], self.meanandCI[2][1]])
 
         self.final_yhat = self.model_conv_irf(self.use_t, self.final_vals)
         scaled_residual = np.divide(self.use_data - self.final_yhat, np.sqrt(self.use_data))
