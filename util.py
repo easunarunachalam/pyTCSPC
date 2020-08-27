@@ -1,28 +1,16 @@
-import cv2
-
 from datetime import datetime
-
 import glob
-
-# from lmfit import minimize, conf_interval, Parameters, Minimizer, fit_report
+import imageio as iio
 import lmfit
-
 import matplotlib.pyplot as plt
-
 import numpy as np
-
+# import cv2
 import os
 from pathlib import Path, PurePath, PureWindowsPath
-
 from scipy.interpolate import interp1d
 from scipy.signal import fftconvolve, convolve
-
 import sdtfile
-
-import seaborn as sns
-
 import sys
-
 import time
 
 
@@ -123,14 +111,14 @@ class SDT(object):
 
             if rawsum:
                 rawsum_img = im.astype("int")
-                cv2.imwrite(self.filename_int_raw_str, rawsum_img)
+                iio.imwrite(self.filename_int_raw_str, rawsum_img)
 
             if corrsum:
                 im = np.divide(im, self.numscans)
                 if isinstance(illprof, np.ndarray) or isinstance(illprof, float) or isinstance(illprof, int):
                     im = np.divide(im, illprof)
-                corrsum_img = im
-                cv2.imwrite(self.filename_int_corr_str, corrsum_img*intensity_scale)
+                corrsum_img = (im*intensity_scale).astype("int")
+                iio.imwrite(self.filename_int_corr_str, corrsum_img)
 
         if meantau:
 
@@ -241,7 +229,7 @@ class SDT(object):
             dc[np.logical_not(is_peak_region)] = 0
 
         if plot:
-            sns.lineplot(self.time(units="ns"), y=dc)
+            plt.plot(self.time(units="ns"), dc)
             plt.xlabel(r"$t$/ns")
             if normalize:
                 plt.ylabel(r"frequency")
