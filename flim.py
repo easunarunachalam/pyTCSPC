@@ -34,19 +34,20 @@ class decay_group:
         self.nphot_irf    = np.sum(self.dc_irf)
 
         self.modeltype    = modeltype
-
         self.params       = lmfit.Parameters()
 
         if self.modeltype is "oneexp":
-            self.params.add('tau1'  , value=4.356242895126343  , min=0.001,  max=10.0)
+            self.params.add('tau1'  , value=4.356242895126343  , min=0.000001,  max=100.0)
             self.params.add('A'     , value=0.90985567510128021, min=0.90, max=1.0)
             self.params.add('shift' , value=9                  , min=-100, max=+100)
         elif self.modeltype is "twoexp":
-            self.params.add('tau1'  , value=2.53  , min=0.001,  max=10.0)
-            self.params.add('tau2'  , value=0.24  , min=0.001,  max=10.0)
+            self.params.add('tau1'  , value=2.53  , min=0.000001,  max=100.0)
+            self.params.add('tau2'  , value=0.24  , min=0.000001,  max=100.0)
             self.params.add('f'     , value=0.27  , min=0,      max=1)
             self.params.add('A'     , value=0.98  , min=0.90,   max=1.0)
             self.params.add('shift' , value=12     , min=-100,   max=+100)
+        else:
+            raise ValueError("Invalid model type.")
 
     def oneexp(self, t, params):
 
