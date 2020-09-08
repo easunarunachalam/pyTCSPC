@@ -12,6 +12,9 @@ import sdtfile
 import sys
 import time
 
+sys.path.append("../")
+import util
+
 
 def sdt_to_images(
         exp_folder,
@@ -85,7 +88,7 @@ def sdt_to_images(
                     i+1, len(sdt_filenames_use), t, est_time, str(sdt_fn)
                 ) + clearline, end="\r")
 
-            sdt = SDT(sdt_fn)
+            sdt = util.SDT(sdt_fn)
             im = sdt.image(
                         rawsum=im_save,
                         corrsum=im_save,

@@ -168,7 +168,7 @@ class decay_group:
         if plot:
             fig = plt.figure(constrained_layout=True, figsize=(18,6))
             w, h = [1, 1], [0.7, 0.3]
-            spec = fig.add_gridspec(nrows=2, ncols=2, width_ratios=w, height_ratios=h)
+            spec = fig.add_gridspec(nrows=2, ncols=2, width_ratios=w, height_ratios=h) #, sharex=True)
 
             ax = fig.add_subplot(spec[0,0])
             ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
