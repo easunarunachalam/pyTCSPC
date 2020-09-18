@@ -7,7 +7,7 @@ from skimage.filters import rank, gaussian
 from skimage.morphology import watershed, disk
 from skimage.transform import rescale
 
-from colorbar import colorbar
+from util import colorbar
 
 
 def smooth_illprof(intensity_illprof, rescale_factor=None, sigma=15, diskr=6, plot=False, saveplot=False):

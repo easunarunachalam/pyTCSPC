@@ -29,7 +29,8 @@ class SDT(object):
         filename,
         block=0,
         flipud=True,
-        fliplr=False
+        fliplr=False,
+        noload=False
     ):
         self.filename              = PurePath(filename)
         self.parent_dir            = self.filename.parents[0]
@@ -42,24 +43,25 @@ class SDT(object):
         self.filename_int_corr_str = str(self.filename_int_corr)
         self.filename_tau_str      = str(self.filename_tau)
 
-        self.file                  = sdtfile.SdtFile(self.filename_str)
-        self.data                  = self.file.data[block]
-        self.times                 = self.file.times[block]
-        self.get_acqtime()
+        if not noload:
+            self.file                  = sdtfile.SdtFile(self.filename_str)
+            self.data                  = self.file.data[block]
+            self.times                 = self.file.times[block]
+            self.get_acqtime()
 
-        # size of time bin (in nanoseconds)
-        self.dt       = (self.times[1] - self.times[0])*1e9
-        self.times    += self.times[1] - self.times[0]
+            # size of time bin (in nanoseconds)
+            self.dt       = (self.times[1] - self.times[0])*1e9
+            self.times    += self.times[1] - self.times[0]
 
-        # number of frames in exposure (should be an integer)
-        self.numscans = self.file.measure_info[0].MeasHISTInfo.fida_points[0]
+            # number of frames in exposure (should be an integer)
+            self.numscans = self.file.measure_info[0].MeasHISTInfo.fida_points[0]
 
 
-        if flipud: self.data = np.flipud(self.data)
-        if fliplr: self.data = np.fliplr(self.data)
+            if flipud: self.data = np.flipud(self.data)
+            if fliplr: self.data = np.fliplr(self.data)
 
-        # (optional) store a mask indicating which pixels correspond to cells
-        self.iscell   = None
+            # (optional) store a mask indicating which pixels correspond to cells
+            self.iscell   = None
 
     def get_acqtime(self):
         '''
@@ -103,6 +105,9 @@ class SDT(object):
         illprof : float or 2-d numpy.ndarray with same x, y dimensions self.data
             illumination profile
         '''
+
+        # if self.numscans == 0:
+        #     return False
 
         rawsum_img, corrsum_img, meantau_img = None, None, None
 
