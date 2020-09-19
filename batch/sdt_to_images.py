@@ -111,12 +111,12 @@ def sdt_to_images(
         print(clearline + "\r{:d} files converted | elapsed time = {:3.2f}".format(i+1, t) + clearline, end="\n")
 
     if return_images and return_objects:
-        return sdt_filenames_use, timeseries, sdt_list
+        return np.array(sdt_filenames_use), np.array(timeseries), np.array(sdt_list)
     elif return_images:
-        return sdt_filenames_use, timeseries
+        return np.array(sdt_filenames_use), np.array(timeseries)
     elif return_objects:
-        return sdt_filenames_use, sdt_list
+        return np.array(sdt_filenames_use), np.array(sdt_list)
     elif return_all_fns:
-        return sdt_filenames_all
+        return np.array(sdt_filenames_all)
     else:
-        return sdt_filenames_use
+        return np.array(sdt_filenames_use)
