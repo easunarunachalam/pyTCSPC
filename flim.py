@@ -12,40 +12,52 @@ import sdtfile
 import sys
 import time
 
+import util
 
 class decay_group:
 
-    def __init__(self, data, irf, mask=None, start_bin=11, end_bin=237, modeltype="twoexp"):
+    def __init__(self, data, irf, mask=None, start_bin=11, end_bin=238, modeltype="twoexp"):
 
         self.start_bin    = start_bin
         self.end_bin      = end_bin
 
-        self.data         = data
-        self.t_data       = data.time(units="ns")
-        self.dc_data      = data.decay_curve(plot=False, normalize=False, mask=mask)
-        self.nbins_data   = len(self.t_data)
-        self.nphot_data   = np.sum(self.dc_data)
-        self.intensity    = self.nphot_data / self.data.npx
-
         self.irf          = irf
         self.t_irf        = irf.time(units="ns")
-        self.dc_irf       = irf.decay_curve(plot=False, normalize=True, trunc=True, bgsub=True)
+        self.dt_irf       = self.irf.dt
+        self.dc_irf       = irf.decay_curve(plot=False, normalize=False, trunc=True, bgsub=True)
         self.nbins_irf    = len(self.t_irf)
         self.nphot_irf    = np.sum(self.dc_irf)
+        self.dc_irf       /= (np.sum(self.dc_irf)*self.dt_irf)
 
+        if isinstance(data, util.SDT):
+            self.data         = data
+            self.t_data       = data.time(units="ns")
+            self.dt_data      = self.data.dt
+            self.dc_data      = data.decay_curve(plot=False, normalize=False, mask=mask)
+            self.nbins_data   = len(self.t_data)
+            self.nphot_data   = np.sum(self.dc_data)
+            self.intensity    = self.nphot_data / self.data.npx
+        elif isinstance(data, np.ndarray) and len(data.shape) == 1:
+            irfdataratio      = len(self.dc_irf)//len(data)
+            self.t_data       = irf.time(units="ns")[(irfdataratio-1)::irfdataratio]
+            self.dc_data      = data
+            self.dt_data      = self.dt_irf * len(self.dc_irf)/len(data)
+            self.nbins_data   = len(data)
+
+        self.use_t, self.use_data = self.t_data[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
         self.modeltype    = modeltype
         self.params       = lmfit.Parameters()
 
         if self.modeltype is "oneexp":
             self.params.add('tau1'  , value=4.356242895126343  , min=0.000001,  max=100.0)
             self.params.add('A'     , value=0.90985567510128021, min=0.90, max=1.0)
-            self.params.add('shift' , value=9                  , min=-100, max=+100)
+            self.params.add('shift' , value=3.5                  , min=-100, max=+100)
         elif self.modeltype is "twoexp":
             self.params.add('tau1'  , value=2.53  , min=0.000001,  max=100.0)
             self.params.add('tau2'  , value=0.24  , min=0.000001,  max=100.0)
             self.params.add('f'     , value=0.27  , min=0,      max=1)
             self.params.add('A'     , value=0.98  , min=0.90,   max=1.0)
-            self.params.add('shift' , value=12     , min=-100,   max=+100)
+            self.params.add('shift' , value=3.5   , min=-100,   max=+100)
         else:
             raise ValueError("Invalid model type.")
 
@@ -74,6 +86,7 @@ class decay_group:
 
         # time = one laser period
         times     = np.arange(0, self.irf.laser_period(), self.irf.dt)
+        # print(self.irf.laser_period())
 
         # values of model over this period
         if self.modeltype is "oneexp":
@@ -86,21 +99,21 @@ class decay_group:
 
         # convolve model with IRF
         roll_irf  = np.roll(self.dc_irf, int(np.round(params["shift"])))
-        cnv       = fftconvolve(roll_irf, dup_model, mode="full")*self.irf.dt
-        # cnv       = fftconvolve(self.dc_irf, dup_model, mode="full")*self.irf.dt
+        # cnv       = fftconvolve(roll_irf, dup_model, mode="full") #*self.irf.dt
+        cnv       = fft_convolve_pow2pad(roll_irf, dup_model, realpart=True)
 
         # keep the second period of the convolution
-        p2        = cnv[nbins_laser_period+1:nbins_laser_period+1+self.nbins_irf]
+        p2        = cnv[(nbins_laser_period+1):(nbins_laser_period+1+self.nbins_irf)]
 
         # collapse down to the same number of bins as the data
         rshp      = np.sum(np.reshape(p2, (self.nbins_data, len(p2)//self.nbins_data)), axis=1)
 
         # scale by total number of photons (in data) within time range of interest
-        counts    = np.sum(self.dc_data[self.start_bin:(self.end_bin+1)])
-        scaled    = counts*rshp/np.sum(rshp[self.start_bin:(self.end_bin+1)])
+        counts    = np.sum(self.dc_data) #[self.start_bin:self.end_bin])
+        scaled    = counts*rshp/np.sum(rshp[self.start_bin:self.end_bin])
 
         # indices of requested times (first argument)
-        t_idx     = np.round(np.divide(t, self.data.dt)).astype(int) - 1
+        t_idx     = np.maximum(np.round(np.divide(t, self.dt_data)).astype(int) - 1, 0)
 
         # print(scaled)
         return scaled[t_idx]
@@ -117,7 +130,6 @@ class decay_group:
             fitcolor="crimson"
         ):
 
-        self.use_t, self.use_data = self.data.time()[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
         self.fit_weight = np.divide(1., np.sqrt(self.use_data))
         self.fit_weight[np.isinf(self.fit_weight)] = 0
 
@@ -128,12 +140,12 @@ class decay_group:
 
         elif method is "emcee":
 
-            out = m.minimize(method="dual_annealing")
+            out = m.minimize(method="leastsq")
             self.final_vals = out.params.valuesdict()
             for key in self.params.keys():
                 self.params[str(key)].value = self.final_vals[str(key)]
 
-            out = m.minimize(method="emcee", burn=500, steps=1000)
+            out = m.minimize(method="emcee", burn=1000, steps=5000)
             # out = m.minimize(method="emcee", burn=2000, steps=3000)
 
         else:
@@ -197,3 +209,26 @@ class decay_group:
             plt.show()
 
         return self.meanandCI, (self.use_t, self.final_yhat)
+
+def nextpow2(n):
+    """
+    return the next power of 2
+    """
+    log2n_floor = int(np.floor(np.log2(n)))
+
+    return 2**(log2n_floor + 1)
+
+def fft_convolve_pow2pad(seq1, seq2, realpart=False):
+    """
+    Convolve sequences seq1 and seq2 using Fourier transforms after zero-padding
+    """
+    nfft    = nextpow2(len(seq1)+len(seq2)-1);
+    F_seq1  = np.fft.fft(seq1, n=nfft)
+    F_seq2  = np.fft.fft(seq2, n=nfft)
+    F_seqc  = np.multiply(F_seq1, F_seq2)
+    seqc    = np.fft.ifft(F_seqc)
+
+    if realpart:
+        return np.real(seqc)
+    else:
+        return seqc
