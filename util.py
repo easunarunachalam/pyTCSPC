@@ -3,8 +3,8 @@ import glob
 import imageio as iio
 import lmfit
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
-# import cv2
 import os
 from pathlib import Path, PurePath, PureWindowsPath
 from scipy.interpolate import interp1d
@@ -218,9 +218,6 @@ class SDT(object):
         n_time_bins = selected_decays.shape[-1]
         dc = selected_decays.reshape(-1, n_time_bins).sum(axis=0).astype(float)
 
-        if normalize:
-            dc = np.divide(dc, np.sum(dc) *self.dt)
-
         if bgsub:
             is_background = (self.time() > 7) & (self.time() < 9)
             background_time = self.time()[is_background]
@@ -232,6 +229,9 @@ class SDT(object):
         if trunc:
             is_peak_region = (self.time() >= 1.5) & (self.time() <= 3)
             dc[np.logical_not(is_peak_region)] = 0
+
+        if normalize:
+            dc = np.divide(dc, np.sum(dc)*self.dt)
 
         if plot:
             plt.plot(self.time(units="ns"), dc)
@@ -249,6 +249,7 @@ class SDT(object):
         return laser period (in nanoseconds)
         '''
         mi = self.file.measure_info[0]
+        return 12.4599295
         return np.mean((1/mi["StopInfo"]["min_sync_rate"][0], 1/mi["StopInfo"]["max_sync_rate"][0]))*1e9
 
     def load_ilastik_sgm(self, fname_prob_map=None, channel_cell=0, p_threshold_cell=0.5):
@@ -286,3 +287,10 @@ def colorbar(mappable):
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
     return fig.colorbar(mappable, cax=cax)
+
+def categorical_colormap(ncolors):
+    # ncolors = 1000
+    colorlist = np.array(plt.cm.tab20b(np.arange(ncolors)/ncolors))
+    np.random.default_rng().shuffle(colorlist)
+    colorlist[0,:] = np.array([0,0,0,1])
+    cm = LinearSegmentedColormap.from_list("shuffled", colorlist, N=ncolors)
