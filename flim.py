@@ -45,6 +45,10 @@ class decay_group:
             self.nbins_data   = len(data)
 
         self.use_t, self.use_data = self.t_data[self.start_bin:self.end_bin], self.dc_data[self.start_bin:self.end_bin]
+
+        self.fit_weight = np.divide(1., np.sqrt(self.use_data))
+        self.fit_weight[np.isinf(self.fit_weight)] = 0
+
         self.modeltype    = modeltype
         self.params       = lmfit.Parameters()
 
@@ -130,8 +134,8 @@ class decay_group:
             fitcolor="crimson"
         ):
 
-        self.fit_weight = np.divide(1., np.sqrt(self.use_data))
-        self.fit_weight[np.isinf(self.fit_weight)] = 0
+        # self.fit_weight = np.divide(1., np.sqrt(self.use_data))
+        # self.fit_weight[np.isinf(self.fit_weight)] = 0
 
         m = lmfit.Minimizer(self.residual, self.params) #, args=(self.use_t, self.use_data, self.fit_weight))
 
