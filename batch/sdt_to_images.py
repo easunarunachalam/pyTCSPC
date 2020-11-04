@@ -120,3 +120,49 @@ def sdt_to_images(
         return np.array(sdt_filenames_all)
     else:
         return np.array(sdt_filenames_use)
+
+def images_to_stacks(npos=0, nch=1, expdir="", sdt_fns=[], fnstems_use=[], suffix="_intensity_corr.tiff", verbose=True):
+    """
+    generate tiff stacks for time series at each position
+
+    Parameters
+    ----------
+    npos: number of positions at which images were acquired at each time fida_points
+    nch: number of acquisition channels at each time point
+    expdir: directory containing all files to be converted
+    sdt_fns: list of filenames (including full path) of all raw image files (SDT format)
+    fnstems_use: filename "stems" to use (stem = filename less extension and suffix indicating image number)
+    suffix: string appended to each raw image file to produce the filename for the corresponding corrected intensity images
+    verbose: print progress of construction
+
+    Returns
+    -------
+    No results returned
+
+    """
+    positionlist = np.arange(0,npos)
+    for ipos in positionlist:
+        if verbose: print("    Working on {:d}".format(ipos), end="\r")
+        for ich in np.arange(nch):
+
+            for ifnstem, fnstem in enumerate(fnstems_use):
+                fnsublist = [str(sdt_fn) for sdt_fn in sdt_fns if fnstem == str(sdt_fn.stem.split("_c")[0])][((ipos*nch)+ich)::(npos*nch)]
+                if ifnstem == 0:
+                    imgfnlist = fnsublist
+                else:
+                    imgfnlist += fnsublist
+
+    #         print("\n\n")
+    #         _ = [print(imgfn) for imgfn in imgfnlist]
+    #         sys.exit()
+            imglist = []
+            for i, sdt_fn in enumerate(imgfnlist):
+                sdt_path = PurePath(sdt_fn)
+                img_path = PurePath.joinpath(sdt_path.parent, sdt_path.stem + suffix)
+                img = iio.imread(str(img_path))
+                imglist.append(img)
+                if verbose: print(i, end="\r")
+
+            fn_vid = PurePath.joinpath(expdir, "pos" + str(ipos) + "ch" + str(ich) + ".tiff")
+            if verbose: print(fn_vid)
+            iio.mimwrite(fn_vid, imglist)
