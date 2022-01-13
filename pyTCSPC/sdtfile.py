@@ -92,7 +92,7 @@ Examples
 
 Read image and metadata from a SPC Setup & Data File:
 
->>> sdt = SdtFile('image.sdt')
+>>> sdt = _sdt_file('image.sdt')
 >>> sdt.header.revision
 588
 >>> sdt.info.id[1:-1]
@@ -108,7 +108,7 @@ Read image and metadata from a SPC Setup & Data File:
 
 Read data and metadata from a SPC Setup & Data File with mutliple data sets:
 
->>> sdt = SdtFile('fluorescein.sdt')
+>>> sdt = _sdt_file('fluorescein.sdt')
 >>> len(sdt.data)
 4
 >>> sdt.data[3].shape
@@ -118,7 +118,7 @@ Read data and metadata from a SPC Setup & Data File with mutliple data sets:
 
 Read data from a SPC FCS Data File as numpy array:
 
->>> sdt = SdtFile('fcs.sdt')
+>>> sdt = _sdt_file('fcs.sdt')
 >>> sdt.info.id[1:-1]
 'SPC FCS Data File'
 >>> len(sdt.data)
@@ -134,7 +134,7 @@ from __future__ import division, print_function
 
 __version__ = '2019.7.28'
 __docformat__ = 'restructuredtext en'
-__all__ = ('SdtFile', )
+__all__ = ('_sdt_file', )
 
 import os
 import io
@@ -144,7 +144,7 @@ import zipfile
 import numpy
 
 
-class SdtFile(object):
+class _sdt_file(object):
     """Becker & Hickl SDT file.
 
     Attributes

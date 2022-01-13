@@ -1,0 +1,29 @@
+name: pyTCSPC
+channels:
+  - defaults
+dependencies:
+  - pandas
+  - xarray
+  - scikit-image
+  - imageio
+  - numpy
+  - h5py
+  - matplotlib
+  - tqdm
+  - seaborn
+  - scipy
+  - scikit-learn
+  - ipykernel
+  - jupyterlab
+  - nodejs
+  - dask
+  - distributed
+  - napari
+  - qtpy
+  - pyqt
+  - pyside2
+  - widgetsnbextension
+  - ipywidgets
+  - pandas-profiling
+  - openpyxl
+prefix: C:\Users\Arunachalam\anaconda3\envs\pyTCSPC

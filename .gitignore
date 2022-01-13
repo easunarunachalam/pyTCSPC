@@ -1,6 +1,9 @@
 __pycache__
+.pytest_cache
 .ipynb_checkpoints
 *-checkpoint.ipynb
 *.set
 *.spc
+*.swp
 *.dat
+old.py
