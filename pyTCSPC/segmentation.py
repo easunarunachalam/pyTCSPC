@@ -48,8 +48,7 @@ def plot_contours(
         contour_alpha=0.3,
     ):
     """
-    find contours at a constant value
-    display the image and plot all contours found
+    Find contours at a constant value, display the image and plot all contours found. Returns handle to figure, handle to axis, and mask.
     """
     mask = np.logical_and(contour_image >= contour_lo_value, contour_image <= contour_hi_value)
 

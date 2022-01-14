@@ -125,11 +125,14 @@ def correct_intensity(
     """
 
     if isinstance(raw_image, xr.DataArray) and isinstance(mask, xr.DataArray) and manual_multiply:
-        print("hello2")
-        if raw_image.dims == mask.dims:
-            return np.multiply(raw_image.data, mask.data)
-        else:
-            raise ValueError("Raw image and mask have incompatible dimensions.")
+
+        assert raw_image.dims == mask.dims, ValueError("Raw image and mask have incompatible dimensions.")
+
+        corrected_data = np.multiply(raw_image.data, mask.data)
+        raw_image.data = corrected_data
+
+        return raw_image
+
     else:
         # print("hello3")
         # if isinstance(raw_image, xr.DataArray):
@@ -248,42 +251,27 @@ def decay_curve(
 
     """
 
-    if isinstance(flim_image, xr.DataArray) and (flim_image.channel.values.size != 1):
-        raise ValueError("Channel (e.g. M1, M2, NADH, Venus) not specified. Use '.sel(channel=<channel_name>)' to select detector.")
+    if isinstance(flim_image, xr.DataArray):
+        if (flim_image.channel.values.size != 1):
+            raise ValueError("Channel (e.g. M1, M2, NADH, Venus) not specified. Use '.sel(channel=<channel_name>)' to select detector.")
+
+        selected_decays = flim_image.data
+
+    n_time_bins = selected_decays.shape[-1]
+    selected_decays = selected_decays.reshape((-1, n_time_bins))
 
     if mask is None:
-        if isinstance(flim_image, xr.DataArray):
-            selected_decays = flim_image.values
         npx = 1
     else:
-        if isinstance(mask, da.Array):
-            mask = mask.compute()
-
-        if isinstance(flim_image, xr.DataArray):
-            flim_image = flim_image.data
-
-        if isinstance(flim_image, da.Array):
-            flim_image = flim_image.compute()
-
-        # print(flim_image.shape, mask.shape)
-
-        flat_mask = np.reshape(mask, (mask.shape[0]*mask.shape[1]))
-        flat_yx_m = np.reshape(flim_image, (flim_image.shape[0]*flim_image.shape[1],-1))
-        selected_decays = flat_yx_m[flat_mask,:]
-
-        # selected_decays = flim_image[mask,:]
-        # selected_decays = flim_image[mask,:]
-        # print(type(flim_image))
-        # print(type(mask))
-        # raise TypeError(f"flim_image type is {type(flim_image):s} and mask type is {type(mask):s}")
-        # selected_decays = flim_image[mask,:]
+        if isinstance(mask, xr.DataArray):
+            mask = mask.data
+        mask = np.reshape(mask, (-1))
         npx = np.sum(mask)
-    # else:
-    #     raise TypeError("Invalid mask type")
+
+        selected_decays = selected_decays[mask,:]
 
     # combine decays for all selected pixels
     # (sum values from all decays in each time bin)
-    n_time_bins = selected_decays.shape[-1]
     dc = selected_decays.reshape(-1, n_time_bins).sum(axis=0).astype(float)
 
     if bgsub:
@@ -348,7 +336,7 @@ def construct_multichannel_flim_image(flim_image_list, channel_names_list):
     else:
         return None
 
-def batch_convert_flim_images(main_dir=None, fns=None, exclude_in_names=["calibration"], n_acqs_per_img=1, channel_names=[[]], correction_mask=None, archive_name="processed_data.zarr", group="unstructured", dry_run=False, overwrite=False, n_jobs=4):
+def batch_convert_flim_images(main_dir=None, fns=None, exclude_in_names=["calibration"], n_acqs_per_img=1, channel_names=[[]], correction_mask=None, archive_name="processed_data.zarr", group="unstructured", dry_run=False, test_first_only=False, overwrite=False, n_jobs=4):
     """
     Convert sdt files in a directory to multichannel FLIM images and intensity images saved in zarr format.
 
@@ -362,11 +350,12 @@ def batch_convert_flim_images(main_dir=None, fns=None, exclude_in_names=["calibr
 
     """
 
+    assert n_acqs_per_img == len(channel_names), ValueError("len(channel_names) must equal 'n_acqs_per_img'.")
+
     if (main_dir is None) and (fns is not None):
         _
     elif (main_dir is not None) and (fns is None):
         main_dir = Path(main_dir)
-        # fns = np.array([Path(fp) for fp in glob.glob(str(main_dir.joinpath("**/*.sdt")), recursive=True)])
         fns = np.sort([Path(fp) for fp in glob.glob(str(main_dir.joinpath("**/*.sdt")), recursive=True) if not contains_any_targets(str(fp), exclude_in_names)])
     else:
         raise TypeError("Must specify either 'main_dir' or 'fns' but not both.")
@@ -380,7 +369,7 @@ def batch_convert_flim_images(main_dir=None, fns=None, exclude_in_names=["calibr
     for parent_dir, fns_contained in zip(parent_dirs, fns_contained_list):
         archive_path = parent_dir.joinpath(archive_name)
 
-        if dry_run:
+        if dry_run or test_first_only:
             print(archive_path)
             n_jobs = 1
 
@@ -424,7 +413,11 @@ def batch_convert_flim_images(main_dir=None, fns=None, exclude_in_names=["calibr
             else:
                 flim_img = construct_multichannel_flim_image(flim_img_list, channel_names)
                 intensity_img = intensity_image(flim_img, correct_mask=correction_mask)
+                # return flim_img, intensity_img
                 ds = xr.Dataset(dict(FLIM=flim_img, intensity=intensity_img))
+
+                if test_first_only:
+                    return ds
 
                 if i_img == 0:
                     ds.to_zarr(archive_path, mode=initial_mode, group=group + f"/{int(i_group):d}", synchronizer=synchronizer, consolidated=False)
@@ -447,7 +440,10 @@ def batch_convert_flim_images(main_dir=None, fns=None, exclude_in_names=["calibr
             )
         else:
             for i_img, i_group in processing_iterator:
-                process_single_image_set(i_img, i_group)
+                if test_first_only:
+                    return process_single_image_set(i_img, i_group)
+                else:
+                    process_single_image_set(i_img, i_group)
 
 
 def bh_acquisition_index(orig_filename):

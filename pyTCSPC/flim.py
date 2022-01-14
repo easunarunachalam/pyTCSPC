@@ -1,4 +1,5 @@
 from copy import deepcopy
+import dask.array as da
 from datetime import datetime
 import glob
 import imageio as iio
@@ -86,7 +87,7 @@ class decay_group:
 
     def load_data(self, data, mask=None, fit_start_bin=None, fit_end_bin=None, npx=1):
 
-        if isinstance(data, np.ndarray) and len(data.shape) == 1:
+        if (isinstance(data, np.ndarray) or isinstance(data, da.Array)) and len(data.shape) == 1:
             self.dc_data      = data
             self.nbins_data   = len(self.dc_data)
             self.adc_ratio    = self.nbins_irf//self.nbins_data
@@ -107,8 +108,7 @@ class decay_group:
         # select domain for fitting
         # default is to fit the region with zonzero values less a small buffer on either side
         # i.e. throw out the first and last 100 ps
-
-        nonzero_data = np.where(self.dc_data > 0)[0]
+        nonzero_data = np.argwhere(self.dc_data > 0)
 
         if len(nonzero_data) == 0: # no photons to use
             return False # failure
@@ -585,7 +585,7 @@ class decay_group:
             #     "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3}
             # }
             self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -100 , "max":   100, "step": 1   },
+                "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
                 "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
                 "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
                 "tau2":  {"value": 1.000, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
@@ -612,7 +612,7 @@ class decay_group:
             self.model_fn = self.model_3exp
 
             self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -100 , "max":   100, "step": 1   },
+                "shift": {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
                 "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
                 "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
                 "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
