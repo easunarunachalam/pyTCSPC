@@ -9,8 +9,9 @@ from .util import *
 import numpy as np
 import matplotlib.pyplot as plt
 
-from skimage import filters, measure
+from skimage import filters, measure, segmentation, feature, future
 from skimage.filters import gaussian
+from sklearn.ensemble import RandomForestClassifier
 
 
 def gaussian_blur(image, sigma=3, preserve_range=False, truncate=None, **kwargs):
@@ -98,6 +99,12 @@ def calculate_segmentation_masks(intensity_dataset, seg_function):
         dask="parallelized",
         dask_gufunc_kwargs={"allow_rechunk": True},
     )
+
+def create_rfclassifier(n_estimators=50, n_jobs=-1, max_depth=10, max_samples=0.05):
+    return RandomForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs, max_depth=max_depth, max_samples=max_samples)
+
+def train_rfclassifier(clf, labeled_frame_labels, labeled_frame_features):
+    return future.fit_segmenter(labeled_frame_labels, labeled_frame_features, clf)
 
 def features_func(sigma_min=1, sigma_max=16):
     return partial(feature.multiscale_basic_features,
