@@ -126,7 +126,7 @@ def _zoom_image(
     else:
         # zoom in on center of image
         sz = np.array(img.shape, dtype=int)
-        new_sz = sz/zoom_factor
+        new_sz = int(sz/zoom_factor)
         rem_sz = np.array((sz - new_sz)/2, dtype=int)
         img = img[rem_sz[0]:-rem_sz[0],rem_sz[1]:-rem_sz[1]]
 
@@ -192,8 +192,30 @@ def intensity_correction_mask(
                 sigma,
                 diskr,
             )
+from scipy import interpolate
 
+def resample_image(orig_img, new_nx, new_ny, interp_method="linear"):
+    """
+    Upsample or downsample a 2d image to target number of pixels along x and y axes
+    """
 
+    orig_x = np.arange(np.shape(orig_img)[0]) / np.shape(orig_img)[0]
+    orig_y = np.arange(np.shape(orig_img)[1]) / np.shape(orig_img)[1]
+    f = interpolate.interp2d(orig_x, orig_y, orig_img, kind=interp_method)
+    new_x, new_y = np.arange(new_nx)/new_nx, np.arange(new_ny)/new_ny
+
+    return f(new_x, new_y)
+
+def xda_changedatasize(orig_xda, new_data):
+    """
+    Clone an xarray DataArray but assign data of a new size.
+    """
+    return xr.DataArray(
+        data=new_data,
+        dims=orig_xda.dims,
+        coords=orig_xda.coords,
+        attrs=orig_xda.attrs
+    )
 
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
