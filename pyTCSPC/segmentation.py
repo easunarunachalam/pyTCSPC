@@ -3,6 +3,7 @@ from skimage import feature
 
 from skimage import segmentation, feature, future
 from functools import partial
+from joblib import Parallel, delayed
 
 from .util import *
 
@@ -112,6 +113,29 @@ def features_func(sigma_min=1, sigma_max=16):
                 sigma_min=sigma_min, sigma_max=sigma_max,
                 multichannel=True)
 
+def calc_features(da_intensity, store_loc, n_jobs=6):
+
+    da_intensity = da_intensity.astype(np.float32).chunk(chunks={
+        "file_info": 1,
+        "channel": 1,
+        "y": len(da_intensity.y.data),
+        "x": len(da_intensity.x.data),
+    })
+
+    Path(store_loc).mkdir(exist_ok=True)
+
+    np.save(Path(store_loc).joinpath("file_info"), da_intensity["file_info"].data)
+
+    def compute_and_save_features(i):
+        im = da_intensity.isel(file_info=i).compute().data
+        im_channel_last_axis = np.moveaxis(im, 0, -1)
+
+        np.save(
+            Path(store_loc).joinpath(str(i)),
+            features_func()(im_channel_last_axis)
+        )
+
+    Parallel(n_jobs=n_jobs)(delayed(compute_and_save_features)(i) for i in trange(len(da_intensity.file_info)))
 
 def predict_prob_segmenter(features, clf):
     """Segmentation of images using a pretrained classifier.
