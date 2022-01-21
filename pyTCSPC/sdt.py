@@ -63,7 +63,7 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.float32):
     #     "laser_period": laser_period,
     # }
 
-    return xr.DataArray(
+    da = xr.DataArray(
         data=file.data[np.newaxis,:],
         dims=dim_list,
         coords={
@@ -77,6 +77,15 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.float32):
         },
         # attrs=file_attrs
     )
+
+    da = da.chunk({"file_info": 1, "channel": 1, "microtime_ns": len(da["microtime_ns"].data)})
+
+    if "Y" in dims:
+        da = da.chunk({"y": len(da["y"].data)})
+    if "X" in dims:
+        da = da.chunk({"x": len(da["x"].data)})
+
+    return da
 
 def get_acqtime(sdtfile_info):
     """
