@@ -787,6 +787,7 @@ class decay_group:
 def calculate_FLIM_fits(
     da_flim,
     da_segmentation,
+    irf,
     irf_kws=dict(),
     parameter_vals=["shift", "A", "tau1", "tau2", "f"],
     value_type_vals=["value", "err", "min", "max", "step"]

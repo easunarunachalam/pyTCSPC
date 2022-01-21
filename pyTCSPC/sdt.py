@@ -256,6 +256,8 @@ def decay_curve(
             raise ValueError("Channel (e.g. M1, M2, NADH, Venus) not specified. Use '.sel(channel=<channel_name>)' to select detector.")
 
         selected_decays = flim_image.data
+    else:
+        selected_decays = flim_image
 
     n_time_bins = selected_decays.shape[-1]
     selected_decays = selected_decays.reshape((-1, n_time_bins))
