@@ -13,7 +13,7 @@ def open_zarr_to_xds(store_path):
 
     group_names = sorted([int(group[0]) for group in list(zarr.open(store_path).groups())])
     ds_filenames = [str(Path(store_path).joinpath(str(group_name))) for group_name in group_names]
-    ds = xr.open_mfdataset(ds_filenames, engine="zarr", consolidated=False, combine="nested", concat_dim="file_info", compat="equals")
+    ds = xr.open_mfdataset(ds_filenames, engine="zarr", consolidated=False, combine="nested", concat_dim="file_info", compat="equals", overwrite_encoded_chunks=True)
 
     return ds.transpose("file_info", ...)
     # ds = xr.open_mfdataset(ds_filenames, engine="zarr", consolidated=False, concat_dim="file_info", compat="no_conflicts")
