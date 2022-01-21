@@ -338,7 +338,20 @@ def construct_multichannel_flim_image(flim_image_list, channel_names_list):
     else:
         return None
 
-def batch_convert_flim_images(main_dir=None, fns=None, exclude_in_names=["calibration"], n_acqs_per_img=1, channel_names=[[]], correction_mask=None, archive_name="processed_data.zarr", group="unstructured", dry_run=False, test_first_only=False, overwrite=False, n_jobs=4):
+def batch_convert_flim_images(
+    main_dir=None,
+    fns=None,
+    exclude_in_names=["calibration"],
+    n_acqs_per_img=1,
+    channel_names=[[]],
+    correction_mask=None,
+    archive_name="processed_data.zarr",
+    group="unstructured",
+    dry_run=False,
+    test_first_only=False,
+    overwrite=False,
+    n_jobs=4
+):
     """
     Convert sdt files in a directory to multichannel FLIM images and intensity images saved in zarr format.
 
