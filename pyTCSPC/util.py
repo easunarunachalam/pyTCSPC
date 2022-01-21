@@ -52,6 +52,11 @@ else:
 
 # from util import colorbar
 
+def list_files(folder):
+    for root, folders, files in os.walk(folder):
+        for filename in folders + files:
+            yield Path(os.path.join(root, filename))
+
 def contains_any_targets(test, targets):
     return np.any([(target in test) for target in targets])
 
@@ -227,8 +232,18 @@ def colorbar(mappable):
     cax = divider.append_axes("right", size="5%", pad=0.05)
     return fig.colorbar(mappable, cax=cax)
 
-def categorical_colormap(ncolors):
-    # ncolors = 1000
+def categorical_colormap(ncolors_or_vals):
+    """
+    Create a categorical colormap where 0 is mapped to black. Particularly useful for visualizing instance segmentation results.
+    """
+
+    if isinstance(ncolors_or_vals, int):
+        ncolors = ncolors_or_vals
+    elif isinstance(ncolors_or_vals, list):
+        ncolors_or_vals = len(np.unique(np.array(ncolors_or_vals)))
+    if isinstance(ncolors_or_vals, np.ndarray):
+        ncolors = len(np.unique(ncolors_or_vals))
+
     colorlist = np.array(plt.cm.tab20b(np.arange(ncolors)/ncolors))
     np.random.default_rng().shuffle(colorlist)
     colorlist[0,:] = np.array([0,0,0,1])
