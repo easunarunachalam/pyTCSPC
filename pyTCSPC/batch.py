@@ -6,19 +6,63 @@ import zarr
 
 from .sdt import *
 
-def open_zarr_to_xds(store_path):
+def open_zarr_group_to_xds(store_path):
+    """
+    Open a xarray dataset from a single group in a zarr store
+    """
+
+    ds = xr.open_dataset(store_path, engine="zarr", consolidated=False)
+    return ds #.transpose("file_info", ...)
+
+def zarr_groups(store_path):
+    """
+    List group names in zarr store
+    """
+    group_names = sorted([int(group[0]) for group in list(zarr.open(store_path).groups())])
+    return [str(Path(store_path).joinpath(str(group_name))) for group_name in group_names]
+
+def open_zarr_to_xds(store_path, compat="equals", drop_var_names=[]):
     """
     Open a xarray dataset (containing data from multiple files) from a zarr store
     """
 
-    group_names = sorted([int(group[0]) for group in list(zarr.open(store_path).groups())])
-    ds_filenames = [str(Path(store_path).joinpath(str(group_name))) for group_name in group_names]
-    ds = xr.open_mfdataset(ds_filenames, engine="zarr", consolidated=False, combine="nested", concat_dim="file_info", compat="equals", overwrite_encoded_chunks=True)
+    # group_names = sorted([int(group[0]) for group in list(zarr.open(store_path).groups())])
+    # ds_filenames = [str(Path(store_path).joinpath(str(group_name))) for group_name in group_names]
+    ds_filenames = zarr_groups(store_path)
+
+    def drop_other_vars(ds):
+        for ivar in drop_var_names:
+            if ivar in ds.variables:
+                ds = ds.drop_vars([ivar])
+
+        return ds
+
+    ds = xr.open_mfdataset(ds_filenames,
+        engine="zarr",
+        consolidated=False,
+        combine="nested",
+        concat_dim="file_info",
+        compat=compat,
+        overwrite_encoded_chunks=True,
+        preprocess=drop_other_vars
+    )
 
     return ds.transpose("file_info", ...)
     # ds = xr.open_mfdataset(ds_filenames, engine="zarr", consolidated=False, concat_dim="file_info", compat="no_conflicts")
     # da = ds.to_array().squeeze("variable").reset_coords(["variable"], drop=True)
     # return da
+
+def concat_zarr_datasets(zarr_stores, drop_var_names=[]):
+    ds_list = []
+    for store_path in tqdm(zarr_stores, position=0, desc=None):
+        store_path_unstructured = store_path.joinpath('unstructured')
+
+        i_ds = open_zarr_to_xds(store_path_unstructured, drop_var_names=drop_var_names)
+        ds_list.append(i_ds)
+
+    ds = xr.concat(ds_list, dim="file_info")
+
+    return ds
 
 def reshape_for_pos_tpt(da, num_positions, ragged="trim"):
     """
