@@ -52,10 +52,12 @@ else:
 
 # from util import colorbar
 
-def list_files(folder):
+def list_files(folder, pattern=None):
     for root, folders, files in os.walk(folder):
         for filename in folders + files:
-            yield Path(os.path.join(root, filename))
+            path = PurePath(os.path.join(root, filename))
+            if (pattern is None) or (path.match(pattern)):
+                yield path
 
 def contains_any_targets(test, targets):
     return np.any([(target in test) for target in targets])
