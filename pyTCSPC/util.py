@@ -234,7 +234,7 @@ def colorbar(mappable):
     cax = divider.append_axes("right", size="5%", pad=0.05)
     return fig.colorbar(mappable, cax=cax)
 
-def categorical_colormap(ncolors_or_vals):
+def categorical_colormap(ncolors_or_vals=200, cmap=plt.cm.tab20b):
     """
     Create a categorical colormap where 0 is mapped to black. Particularly useful for visualizing instance segmentation results.
     """
@@ -246,7 +246,7 @@ def categorical_colormap(ncolors_or_vals):
     if isinstance(ncolors_or_vals, np.ndarray):
         ncolors = len(np.unique(ncolors_or_vals))
 
-    colorlist = np.array(plt.cm.tab20b(np.arange(ncolors)/ncolors))
+    colorlist = np.array(cmap(np.arange(ncolors)/ncolors))
     np.random.default_rng().shuffle(colorlist)
     colorlist[0,:] = np.array([0,0,0,1])
     cm = LinearSegmentedColormap.from_list("shuffled", colorlist, N=ncolors)
