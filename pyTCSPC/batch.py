@@ -6,6 +6,15 @@ import zarr
 
 from .sdt import *
 
+def abbrev_coord_data(coord_data, exclude_longer_than=10):
+    data = coord_data.flatten()
+    if len(data) == 1:
+        return data[0]
+    elif len(data) > exclude_longer_than:
+        return []
+    else:
+        return data
+
 def open_zarr_group_to_xds(store_path):
     """
     Open a xarray dataset from a single group in a zarr store
