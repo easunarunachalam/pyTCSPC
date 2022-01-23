@@ -104,7 +104,27 @@ def calculate_segmentation_masks(intensity_dataset, seg_function):
 def create_rfclassifier(n_estimators=50, n_jobs=-1, max_depth=10, max_samples=0.05):
     return RandomForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs, max_depth=max_depth, max_samples=max_samples)
 
-def train_rfclassifier(clf, labeled_frame_labels, labeled_frame_features):
+def train_rfclassifier(clf, label_layer, features_dir="features"):
+
+    # fit using labeled data
+    # therefore, load features only for those images that have been labeled
+    labeled_frame_idxs = np.unique(np.where(label_layer.data != 0)[0])
+    labeled_frame_labels = np.concatenate(
+        (
+            label_layer.data[labeled_frame_idxs],
+    #         prev_fandl["cell_labels"]
+        ), axis=0
+    )
+
+    labeled_frame_features = np.concatenate(
+        (
+            np.array([ np.load(Path(features_dir).joinpath(str(idx)+".npy")) for idx in labeled_frame_idxs]),
+    #         prev_fandl["cell_features"]
+        ), axis=0
+    )
+
+    # clf = future.fit_segmenter(labeled_frame_labels, labeled_frame_features, clf)
+
     return future.fit_segmenter(labeled_frame_labels, labeled_frame_features, clf)
 
 def features_func(sigma_min=1, sigma_max=16):
@@ -113,7 +133,7 @@ def features_func(sigma_min=1, sigma_max=16):
                 sigma_min=sigma_min, sigma_max=sigma_max,
                 multichannel=True)
 
-def calc_features(da_intensity, store_loc, n_jobs=6):
+def calc_features(da_intensity, store_loc, overwrite=False, n_jobs=6):
 
     da_intensity = da_intensity.astype(np.float32).chunk(chunks={
         "file_info": 1,
@@ -127,13 +147,17 @@ def calc_features(da_intensity, store_loc, n_jobs=6):
     np.save(Path(store_loc).joinpath("file_info"), da_intensity["file_info"].data)
 
     def compute_and_save_features(i):
-        im = da_intensity.isel(file_info=i).compute().data
-        im_channel_last_axis = np.moveaxis(im, 0, -1)
 
-        np.save(
-            Path(store_loc).joinpath(str(i)),
-            features_func()(im_channel_last_axis)
-        )
+        features_npy_fname = Path(store_loc).joinpath(str(i) + ".npy")
+        if (not features_npy_fname.exists()) or overwrite:
+
+            im = da_intensity.isel(file_info=i).compute().data
+            im_channel_last_axis = np.moveaxis(im, 0, -1)
+
+            np.save(
+                features_npy_fname,
+                features_func()(im_channel_last_axis)
+            )
 
     Parallel(n_jobs=n_jobs)(delayed(compute_and_save_features)(i) for i in trange(len(da_intensity.file_info)))
 
