@@ -24,7 +24,7 @@ if isnotebook():
 else:
     from tqdm import tqdm, trange
 
-def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.float32):
+def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint16):
 
     if not (isinstance(f, str) or isinstance(f,Path)):
         raise TypeError("Invalid input type")
@@ -107,6 +107,9 @@ def sum_images(images, use_xarray_sum=True):
         return images.values.sum(axis=0)
 
 def intensity_image(flim_image, use_xarray_sum=True, correct_mask=None, squeeze=True, normalize_num_scans=True):
+
+    flim_image = flim_image.astype(np.float32)
+
     if use_xarray_sum:
         int_img = flim_image.sum(dim="microtime_ns", keep_attrs=True)
     else:
@@ -429,7 +432,7 @@ def batch_convert_flim_images(
                 if dry_run:
                     print(fns_contained[i_img + i_acq_per_img], end=" ")
                 else:
-                    sdt = load_sdt(fns_contained[i_img + i_acq_per_img], dtype=np.float16)
+                    sdt = load_sdt(fns_contained[i_img + i_acq_per_img], dtype=np.uint16)
                     flim_img_list.append(sdt)
 
             if dry_run:
