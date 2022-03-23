@@ -5,79 +5,71 @@ import pandas as pd
 
 from .flim import *
 
-def plot_timelapse(df_sel, t_start=None, t_end=None, t_start2=None, t_end2=None, f_eq_mito=None, f_eq_cyto=None):
+def plot_timelapse(df_sel, t_start=None, t_end=None, t_start2=None, t_end2=None, f_eq_mito=None, f_eq_cyto=None, plot_fn=sns.scatterplot, fig=None, ax=None,):
     """
 
     """
 
-    df_sel = df_sel.copy()
+    # df_sel = df_sel.copy()
 
-    plot_fn = sns.scatterplot
-    err_kws = {
+    line_kws = {
+        "marker": "s",
+        "markerfacecolor": "w",
         "linewidth": 0,
-        "elinewidth": 1,
-        "capsize": 3,
-        "alpha": 0.4
+        "alpha": 0.8
     }
 
-    is_mito = df_sel["channel"]=="mitochondria"
-    is_cyto = df_sel["channel"]=="cytoplasm"
+    err_kws = {
+        "elinewidth": 1,
+        "capsize": 3,
+    }
 
-    fig, ax = plt.subplots(figsize=(12,16), nrows=4, ncols=2, sharex=True)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(9,12), nrows=4, ncols=2, sharex=True)
 
-    for param, iax, ylabel in zip(["tau1", "tau2", "f", "intensity"], [ax[0,0], ax[1,0], ax[0,1], ax[1,1]], [r"$\tau_l$/ns", r"$\tau_s$/ns", r"$f$", r"intensity (AU)"]):
-        plot_fn(data=df_sel, x="elapsed time", y=param, hue="channel", ax=iax, legend=False)
+    for param, iax, ylabel in zip(["tau1", "tau2", "f", "intensity_norm_marker"], [ax[0,0], ax[1,0], ax[0,1], ax[1,1]], [r"$\tau_l$/ns", r"$\tau_s$/ns", r"$f$", r"intensity (AU)"]):
+
+        for pf in np.unique(df_sel["photons_from"].values):
+
+            if param != "intensity_norm_marker":
+                iax.errorbar(
+                    df_sel.loc[df_sel["photons_from"] == pf, "elapsed time"],
+                    df_sel.loc[df_sel["photons_from"] == pf, param],
+                    df_sel.loc[df_sel["photons_from"] == pf, param+"_err"],
+                    **line_kws,
+                    **err_kws
+                )
+            else:
+                iax.plot(
+                    df_sel.loc[df_sel["photons_from"] == pf, "elapsed time"],
+                    df_sel.loc[df_sel["photons_from"] == pf, param],
+                    **line_kws
+                )
         iax.set_ylabel(ylabel)
-
-        if param != "intensity":
-            iax.errorbar(
-                df_sel.loc[is_mito, "elapsed time"],
-                df_sel.loc[is_mito, param],
-                df_sel.loc[is_mito, param+"_err"],
-                **err_kws
-            )
-            iax.errorbar(
-                df_sel.loc[is_cyto, "elapsed time"],
-                df_sel.loc[is_cyto, param],
-                df_sel.loc[is_cyto, param+"_err"],
-                **err_kws
-            )
 
     # for param, iax in zip(["beta", "C_NADHfree", "r_ox", "J_ox"], [ax[2,0], ax[3,0], ax[2,1], ax[3,1]]):
-    for param, iax, ylabel in zip(["beta", "C_NADHfree", "r_ox", "J_ox"], [ax[2,0], ax[3,0], ax[2,1], ax[3,1]], [r"$\beta$", r"$C_{NADH,free}$", r"$r_{ox}$", r"$J_{ox}$"]):
-        plot_fn(data=df_sel, x="elapsed time", y=param, hue="channel", ax=iax, legend=False)
+    for param, iax, ylabel in zip(["beta", "CNADHf", "rox", "JFLIM"], [ax[2,0], ax[3,0], ax[2,1], ax[3,1]], [r"$\beta$", r"$C_{NADH,free}$", r"$r_{ox}$", r"$J_{ox}$"]):
+        # plot_fn(data=df_sel, x="elapsed time", y=param, hue="channel", ax=iax, legend=False)
+        for pf in np.unique(df_sel["photons_from"].values):
+            iax.set_ylabel(ylabel)
+            iax.plot(
+                df_sel.loc[df_sel["photons_from"] == pf, "elapsed time"],
+                df_sel.loc[df_sel["photons_from"] == pf, param],
+                **line_kws
+            )
         iax.set_ylabel(ylabel)
-
-        if param != "intensity":
-            iax.errorbar(
-                df_sel.loc[is_mito, "elapsed time"],
-                df_sel.loc[is_mito, param],
-                df_sel.loc[is_mito, param+"_err"],
-                **err_kws
-            )
-            iax.errorbar(
-                df_sel.loc[is_cyto, "elapsed time"],
-                df_sel.loc[is_cyto, param],
-                df_sel.loc[is_cyto, param+"_err"],
-                **err_kws
-            )
 
     for iax in ax:
         for jax in iax:
-            if t_start is not None:
-                jax.axvline(x=t_start, color="gray", linestyle="--")
-            if t_end is not None:
-                jax.axvline(x=t_end, color="gray", linestyle="--")
-            if t_start2 is not None:
-                jax.axvline(x=t_start2, color="gray", linestyle="--")
-            if t_end2 is not None:
-                jax.axvline(x=t_end2, color="gray", linestyle="--")
+            ylims = jax.get_ylim()
+            jax.fill_betweenx(ylims, t_start, t_end, color="crimson", alpha=0.2, zorder=0)
+            jax.fill_betweenx(ylims, t_start2, t_end2, color="cornflowerblue", alpha=0.2, zorder=0)
     ax[-1,0].set_xlabel("$t$/min")
     ax[-1,1].set_xlabel("$t$/min")
 
     plt.tight_layout()
 
-    return fig, ax, df_sel
+    return fig, ax
 
     #
     # if (t_start2 is not None) and (t_end2 is not None):

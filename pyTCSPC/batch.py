@@ -64,7 +64,7 @@ def open_zarr_to_xds(store_path, compat="equals", drop_var_names=[]):
 def concat_zarr_datasets(zarr_stores, drop_var_names=[]):
     ds_list = []
     for store_path in tqdm(zarr_stores, position=0, desc=None):
-        store_path_unstructured = store_path.joinpath('unstructured')
+        store_path_unstructured = Path(store_path).joinpath('unstructured')
 
         i_ds = open_zarr_to_xds(store_path_unstructured, drop_var_names=drop_var_names)
         ds_list.append(i_ds)

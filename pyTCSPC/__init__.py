@@ -1,5 +1,7 @@
 from ._version import __version__
 
+from .sdtfile import *
+
 from .sdt import *
 from .spc import *
 from .util import *

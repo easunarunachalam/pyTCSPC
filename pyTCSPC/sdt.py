@@ -19,12 +19,20 @@ from .sdtfile import _sdt_file as raw_sdtfile
 # import sys
 from .util import *
 
-if isnotebook():
-    from tqdm.notebook import tqdm, trange
-else:
-    from tqdm import tqdm, trange
+from tqdm.autonotebook import tqdm, trange
 
-def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint16):
+# if isnotebook():
+#     from tqdm.notebook import tqdm, trange
+# else:
+#     from tqdm import tqdm, trange
+
+# def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=False):
+def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=True):
+    """
+    Read becker & hickl sdt file and return FLIM image data in the form of an xarray.DataArray
+
+    use_dask=False is recommended
+    """
 
     if not (isinstance(f, str) or isinstance(f,Path)):
         raise TypeError("Invalid input type")
@@ -42,6 +50,7 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint16):
 
     mi = file.measure_info[0]
     numscans = np.maximum(1, mi.MeasHISTInfo.fida_points[0])
+    # print(mi["StopInfo"]["min_sync_rate"], mi["StopInfo"]["max_sync_rate"])
     laser_period = np.mean((1/mi["StopInfo"]["min_sync_rate"][0], 1/mi["StopInfo"]["max_sync_rate"][0]))*1e9
 
     dim_list = ["file_info"]
@@ -55,16 +64,8 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint16):
     if channel_names is None:
         channel_names = ["M1", "M2", "M3", "M4"][:file.data.shape[0]]
 
-    # file_attrs = {
-    #     "filename": fpath.name,
-    #     "parent_directory": fpath.parents[0],
-    #     "acqtime": str(acqtime),
-    #     "numscans": numscans,
-    #     "laser_period": laser_period,
-    # }
-
-    da = xr.DataArray(
-        data=file.data[np.newaxis,:],
+    da_sdt = xr.DataArray(
+        data=file.data[np.newaxis,:].astype(dtype),
         dims=dim_list,
         coords={
             "filename": ("file_info", [fpath.name]),
@@ -75,17 +76,17 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint16):
             "channel": channel_names,
             "microtime_ns": np.array(file.times)[0] * 1e9,
         },
-        # attrs=file_attrs
     )
 
-    da = da.chunk({"file_info": 1, "channel": 1, "microtime_ns": len(da["microtime_ns"].data)})
+    if use_dask:
+        da_sdt = da_sdt.chunk({"file_info": 1, "channel": 1, "microtime_ns": len(da_sdt["microtime_ns"].data)})
 
-    if "Y" in dims:
-        da = da.chunk({"y": len(da["y"].data)})
-    if "X" in dims:
-        da = da.chunk({"x": len(da["x"].data)})
+        if "Y" in dims:
+            da_sdt = da_sdt.chunk({"y": len(da_sdt["y"].data)})
+        if "X" in dims:
+            da_sdt = da_sdt.chunk({"x": len(da_sdt["x"].data)})
 
-    return da
+    return da_sdt
 
 def get_acqtime(sdtfile_info):
     """
@@ -441,7 +442,10 @@ def batch_convert_flim_images(
                 flim_img = construct_multichannel_flim_image(flim_img_list, channel_names)
                 intensity_img = intensity_image(flim_img, correct_mask=correction_mask)
                 # return flim_img, intensity_img
-                ds = xr.Dataset(dict(FLIM=flim_img, intensity=intensity_img))
+                ds = xr.Dataset(dict(
+                    FLIM=flim_img,
+                    intensity=intensity_img
+                ))
 
                 if test_first_only:
                     return ds
@@ -460,8 +464,9 @@ def batch_convert_flim_images(
         processing_iterator = list(zip(np.arange(0, len(fns_contained), n_acqs_per_img), np.arange(n_groups)))
         if not dry_run:
             processing_iterator = tqdm(processing_iterator, total=n_groups, desc=str(parent_dir))
-
+        # , tqdm_args=dict(desc=str(parent_dir))
         if n_jobs > 1:
+            # _TOTAL = len(processing_iterator)
             Parallel(n_jobs=n_jobs)(
                     delayed(process_single_image_set)(i_img, i_group) for i_img, i_group in processing_iterator
             )

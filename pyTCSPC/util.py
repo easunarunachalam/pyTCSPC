@@ -13,6 +13,7 @@ import sys
 sys.path.append(r"R:\OneDrive - Harvard University\lab-needleman\code\error_propagation-dev")
 from typing import Union
 import time
+from tqdm.autonotebook import tqdm, trange
 
 # from error_propagation import Complex
 
@@ -21,6 +22,7 @@ if "xarray" in sys.modules:
     import xarray as xr
 
 import imageio
+import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -50,7 +52,17 @@ if isnotebook():
 else:
     from tqdm import tqdm, trange
 
-# from util import colorbar
+class _ProgressParallel(joblib.Parallel):
+    def __call__(self, *args, **kwargs):
+        with tqdm(total=_TOTAL) as self._pbar:
+            return joblib.Parallel.__call__(self, *args, **kwargs)
+
+    def print_progress(self):
+        self._pbar.n = self.n_completed_tasks
+        self._pbar.refresh()
+
+def ProgressParallel(_TOTAL, *args, **kwargs):
+    return _ProgressParallel(*args, **kwargs)
 
 def list_files(folder, pattern=None):
     for root, folders, files in os.walk(folder):
@@ -216,6 +228,15 @@ def resample_image(orig_img, new_nx, new_ny, interp_method="linear"):
 def xda_changedatasize(orig_xda, new_data):
     """
     Clone an xarray DataArray but assign data of a new size.
+
+    Example usage:
+    correction_mask = pc.xda_changedatasize(
+        correction_mask,
+        np.array([
+                pc.resample_image(correction_mask.isel(file_info=0, channel=0).values, 1024, 1024),
+                pc.resample_image(correction_mask.isel(file_info=0, channel=1).values, 1024, 1024)
+            ])[:,:,:,np.newaxis]
+    )
     """
     return xr.DataArray(
         data=new_data,

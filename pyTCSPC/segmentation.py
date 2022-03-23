@@ -144,7 +144,7 @@ def calc_features(da_intensity, store_loc, overwrite=False, n_jobs=6):
 
     Path(store_loc).mkdir(exist_ok=True)
 
-    np.save(Path(store_loc).joinpath("file_info"), da_intensity["file_info"].data)
+    np.save(Path(store_loc).joinpath("file_info"), da_intensity.file_info.data)
 
     def compute_and_save_features(i):
 
@@ -159,7 +159,7 @@ def calc_features(da_intensity, store_loc, overwrite=False, n_jobs=6):
                 features_func()(im_channel_last_axis)
             )
 
-    Parallel(n_jobs=n_jobs)(delayed(compute_and_save_features)(i) for i in trange(len(da_intensity.file_info)))
+    Parallel(n_jobs=n_jobs)(delayed(compute_and_save_features)(i) for i in trange(len(da_intensity["file_info"])))
 
 def predict_prob_segmenter(features, clf):
     """Segmentation of images using a pretrained classifier.

@@ -33,7 +33,7 @@ else:
 class decay_group:
 
     def __init__(self,
-            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, modeltype="2exp", npx=1, irf_kws={}
+            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, modeltype="2exp", npx=1, manual_data=None, irf_kws={}
         ):
 
         self.t_irf        = irf["microtime_ns"].values
@@ -50,8 +50,19 @@ class decay_group:
             mask=mask,
             fit_start_bin=fit_start_bin,
             fit_end_bin=fit_end_bin,
-            npx=npx
+            npx=npx,
+            manual_data=manual_data
         )
+
+        with np.errstate(divide="ignore"):
+            self.fit_weight_sq = np.divide(1., self.use_data)[:,np.newaxis]
+            self.fit_weight_sq[np.isinf(self.fit_weight_sq)] = 0
+            self.fit_weight = np.sqrt(self.fit_weight_sq)
+
+            # self.fit_weight_sq_arr = np.multiply(
+            #         self.fit_weight_sq, #[:,np.newaxis],
+            #         np.ones((1,self.nparams))
+            #     )
 
     def get_param_values(self, values=None, errors=None):
         """
@@ -85,10 +96,12 @@ class decay_group:
             [[self.params[iparam]["min"], self.params[iparam]["max"], self.params[iparam]["step"]] for iparam in self.params]
         )
 
-    def load_data(self, data, mask=None, fit_start_bin=None, fit_end_bin=None, npx=1):
+    def load_data(self, data, mask=None, fit_start_bin=None, fit_end_bin=None, npx=1, manual_data=None):
 
         if (isinstance(data, np.ndarray) or isinstance(data, da.Array)) and len(data.shape) == 1:
             self.dc_data      = data
+            if manual_data is not None:
+                self.dc_data = manual_data
             self.nbins_data   = len(self.dc_data)
             self.adc_ratio    = self.nbins_irf//self.nbins_data
             self.t_data       = self.t_irf[(self.adc_ratio-1)::self.adc_ratio]
@@ -99,6 +112,8 @@ class decay_group:
             self.t_data       = data["microtime_ns"].values
             self.dt_data      = self.t_data[1] - self.t_data[0]
             self.dc_data      = decay_curve(data, plot=False, normalize=False, mask=mask)
+            if manual_data is not None:
+                self.dc_data = manual_data
             self.nbins_data   = len(self.t_data)
             self.adc_ratio    = self.nbins_irf//self.nbins_data
             self.nphot_data   = np.sum(self.dc_data)
@@ -221,6 +236,37 @@ class decay_group:
 
         # values of model over this period
         model  = (1-A) + A*(f1*np.exp(-t/tau1) + (1-f1)*(f2*np.exp(-t/tau2) + (1-f2)*np.exp(-t/tau3)))
+
+        # duplicate model (add second period)
+        dup_model = np.concatenate((model, model))
+
+        # convolve model with IRF
+        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
+        cnv       = fftconvolve(roll_irf, dup_model)
+
+        # keep the second period of the convolution
+        keep_start, keep_end = nbins_laser_period + 1, nbins_laser_period + 1 + self.nbins_irf
+        p2        = cnv[keep_start:keep_end]
+
+        # collapse down to the same number of bins as the data
+        rshp      = np.sum(np.reshape(p2, (self.nbins_data, self.adc_ratio)), axis=1)
+
+        # normalize to 1 within the time range of interest
+        normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
+
+        # scale to number of photons within time range of interest, and truncate to this range
+        return self.nphot_in_range*normed[self.fit_start_bin:(self.fit_end_bin+1)]
+
+    def model_4exp(self, shift, A, tau1, tau2, tau3, tau4, f1, f2, f3):
+
+        # number of time bins (IRF time bin size) in a single laser period
+        nbins_laser_period = int(self.laser_period/self.dt_irf)
+
+        # time = one laser period
+        t      = np.arange(0, self.laser_period, self.dt_irf)
+
+        # values of model over this period
+        model  = (1-A) + A*(f1*np.exp(-t/tau1) + (1-f1)*(f2*np.exp(-t/tau2) + (1-f2)*(f3*np.exp(-t/tau3) + (1-f3)*np.exp(-t/tau4))))
 
         # duplicate model (add second period)
         dup_model = np.concatenate((model, model))
@@ -606,7 +652,6 @@ class decay_group:
                     fix_p[4] = True
                 else:
                     raise ValueError("Invalid parameter name.")
-
         elif model == "3exp":
 
             self.model_fn = self.model_3exp
@@ -631,12 +676,50 @@ class decay_group:
                     fix_p[2] = True
                 elif fp == "tau2":
                     fix_p[3] = True
-                elif fp == "tau2":
+                elif fp == "tau3":
                     fix_p[4] = True
                 elif fp == "f1":
                     fix_p[5] = True
                 elif fp == "f2":
                     fix_p[6] = True
+                else:
+                    raise ValueError("Invalid parameter name.")
+        elif model == "4exp":
+
+            self.model_fn = self.model_4exp
+
+            self.params = {
+                "shift": {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
+                "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
+                "tau2":  {"value": 0.600, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                "tau3":  {"value": 1.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
+                "tau4":  {"value": 0.400, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                "f1":    {"value": 0.200, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                "f2":    {"value": 0.300, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                "f3":    {"value": 0.500, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+            }
+
+            fix_p = [False]*9
+            for fp in fixed_parameters:
+                if fp == "shift":
+                    fix_p[0] = True
+                elif fp == "A":
+                    fix_p[1] = True
+                elif fp == "tau1":
+                    fix_p[2] = True
+                elif fp == "tau2":
+                    fix_p[3] = True
+                elif fp == "tau3":
+                    fix_p[4] = True
+                elif fp == "tau4":
+                    fix_p[5] = True
+                elif fp == "f1":
+                    fix_p[6] = True
+                elif fp == "f2":
+                    fix_p[7] = True
+                elif fp == "f3":
+                    fix_p[8] = True
                 else:
                     raise ValueError("Invalid parameter name.")
 
@@ -673,7 +756,7 @@ class decay_group:
                     pmin[i] = self.params_leastsq[i]
                     pmax[i] = self.params_leastsq[i]
 
-            cvg_hst, p, sp, status = self.custom_leastsq(self.use_data, self.model_fn, init_params, dp, pmin=pmin, pmax=pmax)
+            cvg_hst, p, sp, status = self.custom_leastsq(self.use_data, self.model_fn, init_params, dp, pmin=pmin, pmax=pmax, **method_args)
 
             if save_leastsq_params_array:
                 self.params_leastsq = p
@@ -855,10 +938,24 @@ def NADHFLIM_beta(f):
 def NADHFLIM_CNADHfree(intensity, taushort, taulong, f, scale_factor=1):
     return intensity*(1-f)/(scale_factor*((taulong-taushort)*f + taushort))
 
+def NADHFLIM_CNADHfree_df(df, scale_factor=1):
+    df = df.copy()
+    df["CNADHf"] = df["intensity"]*(1-df["f"])/(scale_factor*((df["tau1"]-df["tau2"])*df["f"] + df["tau2"]))
+    return df
+
 def NADHFLIM_rox(f, feq, alpha=1):
     beta = NADHFLIM_beta(f)
     betaeq = NADHFLIM_beta(feq)
     return alpha*(beta-betaeq)
+
+def NADHFLIM_rox_df(df, is_eq, alpha=1):
+
+    df = df.copy()
+    df["beta"] = NADHFLIM_beta(df["f"])
+    # beta = NADHFLIM_beta(df.loc[np.logical_not(is_eq),"f"])
+    betaeq = np.mean(NADHFLIM_beta(df.loc[is_eq,"f"]))
+    df["rox"] = alpha*(df["beta"]-betaeq)
+    return df
 
 def NADHFLIM_JETC(intensity, taushort, taulong, f, feq, scale_factor=1, alpha=1):
     """
@@ -867,92 +964,13 @@ def NADHFLIM_JETC(intensity, taushort, taulong, f, feq, scale_factor=1, alpha=1)
 
     return NADHFLIM_rox(f,feq,alpha)*NADHFLIM_CNADHfree(intensity, taushort, taulong, f, scale_factor)
 
-# def NADHFLIM_J_cpx(df_sel, eq_idx=None, scale_factor=1, alpha=1, update_df=True, beta_eq_mito=None, beta_eq_cyto=None):
-#     """
-#     Calculate flux using NADH FLIM parameters (Xingbo's method)
-#     """
-#
-#     df_sel = df_sel.copy()
-#
-#
-#     is_mito = df_sel["channel"] == "mitochondria"
-#     is_cyto = df_sel["channel"] == "cytoplasm"
-#
-#
-#     # mitochondrial signal
-#
-#     intensity_cpx = val_err(df_sel.loc[is_mito, "intensity"].values)
-#     f_cpx = val_err(df_sel.loc[is_mito, "f"].values, df_sel.loc[is_mito, "f_err"].values)
-#     taulong_cpx = val_err(df_sel.loc[is_mito, "tau1"].values, df_sel.loc[is_mito, "tau1_err"].values)
-#     taushort_cpx = val_err(df_sel.loc[is_mito, "tau2"].values, df_sel.loc[is_mito, "tau2_err"].values)
-#
-#     beta_cpx = f_cpx/(Complex(np.float64(1),0) - f_cpx)
-#     unity_cpx = val_err(np.float64(1))
-#     scale_cpx = val_err(np.float64(scale_factor))
-#     C_NADHfree_cpx = intensity_cpx*(unity_cpx-f_cpx)/(scale_cpx*((taulong_cpx-taushort_cpx)*f_cpx + taushort_cpx))
-#
-#     if beta_eq_mito is not None:
-#         betaeq_cpx = Complex(beta_eq_mito, 0.0)
-#     elif eq_idx is not None:
-#         eq_idx_tmp = (eq_idx & is_mito).loc[is_mito]
-#         betaeq_cpx = np.mean(beta_cpx[eq_idx_tmp])
-#
-#     alpha_cpx = val_err(alpha)
-#     rox_cpx = alpha_cpx*(beta_cpx-betaeq_cpx)
-#
-#     J_cpx = rox_cpx * C_NADHfree_cpx
-#
-#     df_sel.loc[is_mito,"beta"] = [val.value for val in beta_cpx]
-#     df_sel.loc[is_mito,"beta_err"] = [val.error for val in beta_cpx]
-#
-#     df_sel.loc[is_mito,"C_NADHfree"] = [val.value for val in C_NADHfree_cpx]
-#     df_sel.loc[is_mito,"C_NADHfree_err"] = [val.error for val in C_NADHfree_cpx]
-#
-#     df_sel.loc[is_mito,"r_ox"] = [val.value for val in rox_cpx]
-#     df_sel.loc[is_mito,"r_ox_err"] = [val.error for val in rox_cpx]
-#
-#     df_sel.loc[is_mito,"J_ox"] = [val.value for val in J_cpx]
-#     df_sel.loc[is_mito,"J_ox_err"] = [val.error for val in J_cpx]
-#
-#
-#     # cytoplasmic signal
-#
-#     intensity_cpx = val_err(df_sel.loc[is_cyto, "intensity"].values)
-#     f_cpx = val_err(df_sel.loc[is_cyto, "f"].values, df_sel.loc[is_cyto, "f_err"].values)
-#     taulong_cpx = val_err(df_sel.loc[is_cyto, "tau1"].values, df_sel.loc[is_cyto, "tau1_err"].values)
-#     taushort_cpx = val_err(df_sel.loc[is_cyto, "tau2"].values, df_sel.loc[is_cyto, "tau2_err"].values)
-#
-#     beta_cpx = f_cpx/(Complex(np.float64(1),0) - f_cpx)
-#     unity_cpx = val_err(np.float64(1))
-#     scale_cpx = val_err(np.float64(scale_factor))
-#     C_NADHfree_cpx = intensity_cpx*(unity_cpx-f_cpx)/(scale_cpx*((taulong_cpx-taushort_cpx)*f_cpx + taushort_cpx))
-#
-#     if beta_eq_cyto is not None:
-#         betaeq_cpx = Complex(beta_eq_cyto, 0.0)
-#     elif eq_idx is not None:
-#         eq_idx_tmp = (eq_idx & is_cyto).loc[is_cyto]
-#         betaeq_cpx = np.mean(beta_cpx[eq_idx_tmp])
-#
-#     alpha_cpx = val_err(alpha)
-#     rox_cpx = alpha_cpx*(beta_cpx-betaeq_cpx)
-#
-#     J_cpx = rox_cpx * C_NADHfree_cpx
-#
-#     df_sel.loc[is_cyto,"beta"] = [val.value for val in beta_cpx]
-#     df_sel.loc[is_cyto,"beta_err"] = [val.error for val in beta_cpx]
-#
-#     df_sel.loc[is_cyto,"C_NADHfree"] = [val.value for val in C_NADHfree_cpx]
-#     df_sel.loc[is_cyto,"C_NADHfree_err"] = [val.error for val in C_NADHfree_cpx]
-#
-#     df_sel.loc[is_cyto,"r_ox"] = [val.value for val in rox_cpx]
-#     df_sel.loc[is_cyto,"r_ox_err"] = [val.error for val in rox_cpx]
-#
-#     df_sel.loc[is_cyto,"J_ox"] = [val.value for val in J_cpx]
-#     df_sel.loc[is_cyto,"J_ox_err"] = [val.error for val in J_cpx]
-#
-#     channels_categories = ["mitochondria", "cytoplasm"]
-#     df_sel["channel"] = pd.Categorical(df_sel["channel"], categories = channels_categories)
-#     df_sel = df_sel.sort_values(by=["elapsed time", "channel"])
-#
-#
-#     return df_sel
+def NADHFLIM_JETC_df(df, is_eq, scale_factor=1, alpha=1):
+    """
+    Calculate ETC flux using NADH FLIM parameters (Xingbo's method)
+    """
+    df = df.copy()
+    df = NADHFLIM_CNADHfree_df(df, scale_factor)
+    df = NADHFLIM_rox_df(df, is_eq, alpha)
+    df["JFLIM"] = df["rox"] * df["CNADHf"]
+
+    return df
