@@ -64,18 +64,19 @@ class _ProgressParallel(joblib.Parallel):
 def ProgressParallel(_TOTAL, *args, **kwargs):
     return _ProgressParallel(*args, **kwargs)
 
-def list_files(folder, pattern=None):
+def list_files(folder=".", pattern=None, exclude_in_names=["calibration",]):
     for root, folders, files in os.walk(folder):
         for filename in folders + files:
             path = PurePath(os.path.join(root, filename))
             if (pattern is None) or (path.match(pattern)):
-                yield path
+                if not contains_any_targets(str(path), exclude_in_names):
+                    yield path
 
 def contains_any_targets(test, targets):
     return np.any([(target in test) for target in targets])
 
-def dirs_fns_to_process(glob_str, exclude_in_names=["calibration", "zarr"]):
-    sdt_file_list = np.array([Path(fp) for fp in glob.glob(glob_str, recursive=True) if not contains_any_targets(str(fp), exclude_in_names)])
+def dirs_fns_to_process(folder=".", pattern=None):
+    sdt_file_list = np.array(list(list_files(folder, pattern)))
     sdt_file_dirs = np.array([fn.parent for fn in sdt_file_list])
     sdt_file_dirs_use, invs = np.unique([fn for fn in sdt_file_dirs], return_inverse=True)
     sdt_file_lists = [sdt_file_list[invs == iunq] for iunq in range(len(sdt_file_dirs_use))]

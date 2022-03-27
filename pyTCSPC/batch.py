@@ -27,6 +27,8 @@ def zarr_groups(store_path):
     """
     List group names in zarr store
     """
+    # for group in list(zarr.open(store_path).groups()):
+    #     print(group[0])
     group_names = sorted([int(group[0]) for group in list(zarr.open(store_path).groups())])
     return [str(Path(store_path).joinpath(str(group_name))) for group_name in group_names]
 
@@ -64,7 +66,7 @@ def open_zarr_to_xds(store_path, compat="equals", drop_var_names=[]):
 def concat_zarr_datasets(zarr_stores, drop_var_names=[]):
     ds_list = []
     for store_path in tqdm(zarr_stores, position=0, desc=None):
-        store_path_unstructured = Path(store_path).joinpath('unstructured')
+        store_path_unstructured = Path(store_path)
 
         i_ds = open_zarr_to_xds(store_path_unstructured, drop_var_names=drop_var_names)
         ds_list.append(i_ds)

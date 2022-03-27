@@ -27,11 +27,11 @@ def plot_timelapse(df_sel, t_start=None, t_end=None, t_start2=None, t_end2=None,
     if ax is None:
         fig, ax = plt.subplots(figsize=(9,12), nrows=4, ncols=2, sharex=True)
 
-    for param, iax, ylabel in zip(["tau1", "tau2", "f", "intensity_norm_marker"], [ax[0,0], ax[1,0], ax[0,1], ax[1,1]], [r"$\tau_l$/ns", r"$\tau_s$/ns", r"$f$", r"intensity (AU)"]):
+    for param, iax, ylabel in zip(["tau1", "tau2", "f", "intensity"], [ax[0,0], ax[1,0], ax[0,1], ax[1,1]], [r"$\tau_l$/ns", r"$\tau_s$/ns", r"$f$", r"intensity (AU)"]):
 
         for pf in np.unique(df_sel["photons_from"].values):
 
-            if param != "intensity_norm_marker":
+            if param != "intensity":
                 iax.errorbar(
                     df_sel.loc[df_sel["photons_from"] == pf, "elapsed time"],
                     df_sel.loc[df_sel["photons_from"] == pf, param],
@@ -45,6 +45,7 @@ def plot_timelapse(df_sel, t_start=None, t_end=None, t_start2=None, t_end2=None,
                     df_sel.loc[df_sel["photons_from"] == pf, param],
                     **line_kws
                 )
+                # iax.set_xlim([10,70])
         iax.set_ylabel(ylabel)
 
     # for param, iax in zip(["beta", "C_NADHfree", "r_ox", "J_ox"], [ax[2,0], ax[3,0], ax[2,1], ax[3,1]]):

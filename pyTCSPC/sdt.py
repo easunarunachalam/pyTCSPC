@@ -351,6 +351,102 @@ def construct_multichannel_flim_image(flim_image_list, channel_names_list):
     else:
         return None
 
+def sdt_conversion_list(
+    n_acqs_per_img,
+    main_dir=None,
+    fns=None,
+    exclude_in_names=["calibration"],
+):
+    """
+    main_dir: parent directory containing all child directories that contain sdt file_attrs
+    fns: list of sdt filenames containing absolute or relative paths (but relative paths must be unique)
+    must specify either main or fns
+    """
+
+    if (main_dir is None) and (fns is not None):
+        _
+    elif (main_dir is not None) and (fns is None):
+        main_dir = Path(main_dir)
+        fns = np.sort(list(list_files(folder=main_dir, pattern="*.sdt")))
+    else:
+        raise TypeError("Must specify either 'main_dir' or 'fns' but not both.")
+
+    if not isinstance(exclude_in_names, list):
+        exclude_in_names = [exclude_in_names]
+
+    parent_dirs, rev_map = np.unique([fn.parent for fn in fns], return_inverse=True)
+    fns_contained_list = [fns[(rev_map==i)] for i in range(len(parent_dirs))]
+
+    multichannel_flim_image_sdt_fns = []
+    for parent_dir, fns_contained in zip(parent_dirs, fns_contained_list):
+        for i_img in np.arange(0, len(fns_contained), n_acqs_per_img):
+
+            flim_img_fn_list = []
+
+            if (i_img + n_acqs_per_img - 1) >= len(fns_contained):
+                print("Not enough channels for image requiring this acquisition file: ", fns_contained[i_img])
+                continue
+
+            for i_acq_per_img in range(n_acqs_per_img):
+                flim_img_fn_list.append(fns_contained[i_img + i_acq_per_img])
+
+            multichannel_flim_image_sdt_fns.append(flim_img_fn_list)
+
+    return multichannel_flim_image_sdt_fns
+
+def convert_sdts(
+    conversion_list,
+    channel_names,
+    correction_mask=None,
+    archive_path="processed_data.zarr",
+    sync_path="zarr_writer.sync",
+    overwrite=False,
+    n_jobs=4
+):
+
+    """
+    Convert groups of sdt files in 'conversion_list' to multichannel FLIM images and intensity images saved in zarr format.
+
+    Note that 'consolidated=False' when writing the zarr seems to avoid .zmetadata PermissionErrors. Change to True or None at your own risk.
+
+    """
+
+    for sdt_list in conversion_list:
+        assert len(sdt_list) == len(channel_names), ValueError("len(channel_names) must equal number of acqisitions per image.")
+
+    synchronizer = zarr.ProcessSynchronizer(sync_path)
+
+    def convert_single_group(i_group):
+
+        group_path = Path(archive_path).joinpath(f"/{int(i_group):d}")
+        group_name = str(group_path)
+
+        if group_path.exists() and (not overwrite):
+            return
+
+        sdt_fn_set = conversion_list[i_group]
+        flim_img_list = [ load_sdt(Path(sdt_fn), dtype=np.uint16) for sdt_fn in sdt_fn_set]
+        flim_img = construct_multichannel_flim_image(flim_img_list, channel_names)
+        intensity_img = intensity_image(flim_img, correct_mask=correction_mask)
+
+        ds = xr.Dataset(dict(
+            FLIM=flim_img,
+            intensity=intensity_img
+        ))
+
+        ds.to_zarr(archive_path, mode="a", group=group_name, synchronizer=synchronizer, consolidated=False)
+
+    class ProgressParallel(Parallel):
+        def __call__(self, *args, **kwargs):
+            with tqdm(total=len(conversion_list)) as self._pbar:
+                return Parallel.__call__(self, *args, **kwargs)
+
+        def print_progress(self):
+            self._pbar.n = self.n_completed_tasks
+            self._pbar.refresh()
+
+    ProgressParallel(n_jobs=n_jobs)(delayed(convert_single_group)(i_group) for i_group in range(len(conversion_list)))
+
 def batch_convert_flim_images(
     main_dir=None,
     fns=None,
@@ -451,7 +547,7 @@ def batch_convert_flim_images(
                     return ds
 
                 if i_img == 0:
-                    ds.to_zarr(archive_path, mode=initial_mode, group=group + f"/{int(i_group):d}", synchronizer=synchronizer, consolidated=False)
+                    ds.to_zarr(archive_path, mode="w", group=group + f"/{int(i_group):d}", synchronizer=synchronizer, consolidated=False)
                 else:
                     ds.to_zarr(archive_path, mode="a", group=group + f"/{int(i_group):d}", synchronizer=synchronizer, consolidated=False)
 
