@@ -11,7 +11,12 @@ from scipy.interpolate import interp1d
 from scipy.signal import fftconvolve, convolve
 import sys
 import time
-# import xarray as xr
+from tqdm.autonotebook import tqdm, trange
+
+from .sdt import load_sdt, get_acqtime
+from .sdtfile import _sdt_file as raw_sdtfile
+from .util import bits
+import xarray as xr
 
 
 class SPC(object):
@@ -22,19 +27,23 @@ class SPC(object):
     def __init__(
         self,
         filepath,
-        pixels_per_line=72,
-        nlines=72,
+        pixels_per_line=1,
+        nlines=1,
+        n_pixels_skip=0,
+        n_lines_skip=1,
         show_progress=False,
-        max_nframe=10,
+        max_nframe=1e8,
         read_paired_sdt=True,
         save_raw_traj=True,
         save_images=True
     ):
-        self.filepath = filepath
+        self.filepath = Path(filepath)
         self.pixels_per_line = pixels_per_line
         self.nlines = nlines
+        self.n_pixels_skip = n_pixels_skip
+        self.n_lines_skip = n_lines_skip
 
-        if filepath.suffix == ".spc":
+        if self.filepath.suffix == ".spc":
 
             nentries = (os.path.getsize(filepath)/4) - 1
 
@@ -44,8 +53,8 @@ class SPC(object):
                 raise ValueError("Error: number of bytes in file not evenly divisible by 4.")
 
             if read_paired_sdt:
-                sdt = SDT(self.get_filepath("sdt"))
-                self.acqtime = sdt.acqtime
+                file = raw_sdtfile( self.get_filepath("sdt") )
+                self.acqtime = get_acqtime(file.info)
 
             # uncomment to process only the first few entries
             # nentries = 1000000
@@ -117,7 +126,8 @@ class SPC(object):
                             overflow += 2**12
                             macro[ientry] += 2**12
 
-                entry_iterator.close()
+                if show_progress:
+                    entry_iterator.close()
 
                 # convert macrotime to units of seconds
                 macro *= macro_unit
@@ -127,30 +137,30 @@ class SPC(object):
 
                 # valid events are actual photon detection events
                 valid = np.logical_not(np.isnan(macro))
-                macro, micro, pixel, line, frame = macro[valid], micro[valid], pixel[valid].astype(int), line[valid].astype(int), frame[valid].astype(int)
+                self.macro, self.micro, self.pixel, self.line, self.frame = macro[valid], micro[valid], pixel[valid].astype(int), line[valid].astype(int), frame[valid].astype(int)
 
             # self.event_coord_list = np.vstack((frame, line, pixel)).T
             # self.event_coord_list = np.vstack((line, pixel)).T
 
-            self.pixel_bins = np.arange(-0.5, self.pixels_per_line + 0.5, 1)
-            self.line_bins = np.arange(-0.5, self.nlines + 0.5, 1)
-            self.frame_bins = np.arange(-0.5, np.max(frame) + 1.5, 1)
+            self.pixel_bins = np.arange(-0.5 + self.n_pixels_skip, self.n_pixels_skip + self.pixels_per_line + 0.5, 1)
+            self.line_bins = np.arange(-0.5 + self.n_lines_skip, self.n_lines_skip + self.nlines + 0.5, 1)
+            self.frame_bins = np.arange(-0.5, np.max(self.frame) + 1.5, 1)
 
-            self.pixel_linearindex = self.linear_index(pixel, line)
-            self.frame_idxs = np.arange(np.max(frame) + 1)
+            self.pixel_linearindex = self.linear_index(self.pixel, self.line)
+            self.frame_idxs = np.arange(np.max(self.frame) + 1)
 
             self.all_photons = xr.Dataset(
                 {
-                    "microtime": (["time"], micro),
-                    "frame": (["time"], frame),
-                    "x": (["time"], line),
-                    "y": (["time"], pixel),
+                    "microtime": (["time"], self.micro),
+                    "frame": (["time"], self.frame),
+                    "x": (["time"], self.line),
+                    "y": (["time"], self.pixel),
                 },
                 coords={
-                    "time": macro
+                    "time": self.macro
                 },
                 attrs={
-                    "acqtime": str(self.acqtime),
+                    # "acqtime": str(self.acqtime),
                     "filepath": str(self.filepath),
                     "frame bins": self.frame_bins,
                     "pixel bins": self.pixel_bins,
@@ -164,10 +174,10 @@ class SPC(object):
                     "lifetime sum": (["frame time", "x", "y"], self.video(mode="lifetime sum"))
                 },
                 coords={
-                    "frame time": np.array(frame_start_time)
+                    "frame time": np.array(frame_start_time)[:(len(self.frame_bins)-1)]
                 },
                 attrs={
-                    "acqtime": str(self.acqtime),
+                    # "acqtime": str(self.acqtime),
                     "filepath": str(self.filepath)
                 }
             )
@@ -189,7 +199,8 @@ class SPC(object):
             if save_images:
                 self.images.to_netcdf(
                     self.get_filepath(type="nc"),
-                    mode=self.nc_filewrite_mode(),
+                    mode="w",
+                    # mode=self.nc_filewrite_mode(),
                     # engine="h5netcdf",
                     # encoding={
                     #     "intensity": {"zlib": True, "compression": 9},
@@ -247,33 +258,8 @@ class SPC(object):
             )
         ).T
 
-    # def save_h5(self, fp=None):
-    #
-    #
-    #
-    #     with h5py.File(fp, "w") as hf:
-    #         hf.create_dataset("macro", data=self.macro)
-    #         hf.create_dataset("micro", data=self.micro)
-    #         hf.create_dataset("pixel", data=self.pixel)
-    #         hf.create_dataset("line", data=self.line)
-    #         hf.create_dataset("frame", data=self.frame)
-    #         hf.create_dataset("pixels_per_line", data=self.pixels_per_line)
-    #         hf.create_dataset("nlines", data=self.nlines)
-    #         hf.create_dataset("event_coord_list", data=self.event_coord_list)
-    #         hf.create_dataset("event_coord_list_framewise", data=self.event_coord_list_framewise)
-    #         hf.create_dataset("pixel_bins", data=self.pixel_bins)
-    #         hf.create_dataset("line_bins", data=self.line_bins)
-    #         hf.create_dataset("frame_bins", data=self.frame_bins)
-    #         hf.create_dataset("pixel_linearindex", data=self.pixel_linearindex)
-    #         hf.create_dataset("frame_idxs", data=self.frame_idxs)
-    #
-    #     return
-
     def linear_index(self, pixelvals, linevals):
         return pixelvals + self.pixels_per_line*linevals
-
-    # def image(self):
-    #     return np.histogramdd(self.event_coord_list, bins=(self.line_bins, self.pixel_bins))[0]
 
     def video(self, mode="intensity"):
         """
