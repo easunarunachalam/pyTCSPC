@@ -55,6 +55,7 @@ class decay_group:
         )
 
         with np.errstate(divide="ignore"):
+            # my weights
             self.fit_weight_sq = np.divide(1., self.use_data)[:,np.newaxis]
             self.fit_weight_sq[np.isinf(self.fit_weight_sq)] = 0
             self.fit_weight = np.sqrt(self.fit_weight_sq)
@@ -63,6 +64,11 @@ class decay_group:
             #         self.fit_weight_sq, #[:,np.newaxis],
             #         np.ones((1,self.nparams))
             #     )
+        # Gavin / Tae weights
+        # nonzero_use_data = self.use_data
+        # nonzero_use_data[nonzero_use_data == 0] = 1
+        # self.fit_weight_sq = np.divide(1., nonzero_use_data)[:,np.newaxis]
+        # self.fit_weight = np.sqrt(self.fit_weight_sq)
 
     def get_param_values(self, values=None, errors=None):
         """
@@ -595,7 +601,7 @@ class decay_group:
             leastsq_args={},
             save_leastsq_params_array=False,
             verbose=False,
-            plot=False
+            plot=False,
         ):
 
         if model == "1exp":
@@ -802,7 +808,8 @@ class decay_group:
             datacolor="cornflowerblue",
             dataalpha=0.5,
             showfit=True,
-            fitcolor="crimson"
+            fitcolor="crimson",
+            figsize=(12,4),
         ):
 
         if type(params) != np.ndarray:
@@ -816,7 +823,7 @@ class decay_group:
         sr_hist, sr_bes = np.histogram(scaled_residual, bins=res_bins)
         sr_bcs = sr_bes[1:] - 0.5*(sr_bes[1]-sr_bes[0])
 
-        fig = plt.figure(constrained_layout=True, figsize=(18,6))
+        fig = plt.figure(constrained_layout=True, figsize=figsize)
         plt.suptitle(f"N = {int(self.dc_data.sum()):5d} photons")
         w, h = [1, 1], [0.7, 0.3]
         spec = fig.add_gridspec(nrows=2, ncols=2, width_ratios=w, height_ratios=h) #, sharex=True)

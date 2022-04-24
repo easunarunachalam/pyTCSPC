@@ -44,7 +44,6 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=True)
     acqtime = get_acqtime(file.info)
 
     file.data = np.array(file.data, dtype=dtype)
-    # print(file.data.shape)
 
     times    = np.array(file.times)[0] * 1e9
 
