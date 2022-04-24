@@ -1,8 +1,8 @@
 # pyTCSPC
 
-## !! 🚧 Experimental -- there will frequently be breaking changes !!
+## 🚧 Experimental -- there will frequently be breaking changes
 
-## !! 🚧 Please note that environment files are not kept up to date !!
+## 🚧 Please note that environment files are not kept up to date
 
 ## Python functions for fluorescence lifetime imaging microscopy (FLIM) and fluorescence correlation spectroscopy (FCS):
 
