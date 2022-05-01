@@ -7,7 +7,7 @@
 ## Python functions for fluorescence lifetime imaging microscopy (FLIM) and fluorescence correlation spectroscopy (FCS):
 
 ### FLIM functions
-- read Becker &amp; Hickl .sdt files (based on `sdtfile` from Gohlke lab, UC Irvine)
+- read Becker &amp; Hickl .sdt files (based on [`sdtfile`](https://github.com/cgohlke/sdtfile))
 - produce intensity images
 - fit decay curves
 
