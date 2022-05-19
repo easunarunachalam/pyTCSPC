@@ -1,11 +1,6 @@
 # pyTCSPC
-
 ## 🚧 Experimental -- there will frequently be breaking changes
-
-## 🚧 Please note that environment files are not kept up to date
-
-## Python functions for fluorescence lifetime imaging microscopy (FLIM) and fluorescence correlation spectroscopy (FCS):
-
+## a small Python library for fluorescence lifetime imaging microscopy (FLIM) and fluorescence correlation spectroscopy (FCS) data analysis:
 ### FLIM functions
 - read Becker &amp; Hickl .sdt files (based on [`sdtfile`](https://github.com/cgohlke/sdtfile)) into user-friendly `xarray.DataArray`s suitable for further analysis
 - produce intensity and lifetime images
