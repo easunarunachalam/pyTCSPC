@@ -19,7 +19,7 @@ from .sdtfile import _sdt_file as raw_sdtfile
 # import sys
 from .util import *
 
-from tqdm.autonotebook import tqdm, trange
+from tqdm.notebook import tqdm, trange
 
 # if isnotebook():
 #     from tqdm.notebook import tqdm, trange
@@ -366,7 +366,7 @@ def sdt_conversion_list(
         _
     elif (main_dir is not None) and (fns is None):
         main_dir = Path(main_dir)
-        fns = np.sort(list(list_files(folder=main_dir, pattern="*.sdt")))
+        fns = np.sort(list(list_files(folder=main_dir, pattern="*.sdt", exclude_in_names=exclude_in_names)))
     else:
         raise TypeError("Must specify either 'main_dir' or 'fns' but not both.")
 

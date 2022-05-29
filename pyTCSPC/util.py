@@ -13,7 +13,7 @@ import sys
 sys.path.append(r"R:\OneDrive - Harvard University\lab-needleman\code\error_propagation-dev")
 from typing import Union
 import time
-from tqdm.autonotebook import tqdm, trange
+from tqdm.notebook import tqdm, trange
 
 # from error_propagation import Complex
 
