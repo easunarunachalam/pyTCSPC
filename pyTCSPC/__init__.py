@@ -10,7 +10,6 @@ from .flim import *
 
 from .batch import *
 from .plotting import *
-from .segmentation import *
 # from .segmentation.thresholding import *
 
 # from batch import sdt_to_images, structures
