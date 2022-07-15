@@ -183,8 +183,9 @@ class SPC(object):
             )
 
             if save_raw_traj:
+                raw_traj_path = self.get_filepath(type="nc")
                 self.all_photons.to_netcdf(
-                    self.get_filepath(type="nc"),
+                    raw_traj_path,
                     mode="w",
                     # mode=self.nc_filewrite_mode(),
                     # engine="h5netcdf",
@@ -197,8 +198,11 @@ class SPC(object):
                 )
 
             if save_images:
+                im_path = self.get_filepath(type="nc")
+                im_path = im_path.with_stem(im_path.stem + "_im")
+                
                 self.images.to_netcdf(
-                    self.get_filepath(type="nc"),
+                    im_path,
                     mode="w",
                     # mode=self.nc_filewrite_mode(),
                     # engine="h5netcdf",
