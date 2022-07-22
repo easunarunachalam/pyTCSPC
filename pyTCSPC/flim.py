@@ -13,14 +13,10 @@ from scipy.interpolate import interp1d
 from scipy.optimize import least_squares, leastsq
 from scipy.signal import fftconvolve
 import sys
-sys.path.append(r"R:\OneDrive - Harvard University\lab-needleman\code\error_propagation-dev")
-# from error_propagation import Complex
-
 
 import warnings
 import xarray as xr
 
-# import time
 from .util import *
 from .sdt import *
 
@@ -154,7 +150,7 @@ class decay_group:
 
     def est_A(self):
         """
-        Estimate fraction of decay due to signal rather than noise
+        Estimate fraction of decay due to signal rather than background
         """
 
         t_data_peak = self.t_data[np.argmax(self.dc_data)]
@@ -197,7 +193,6 @@ class decay_group:
 
         # normalize to 1 within the time range of interest
         normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
-
         # scale to number of photons within time range of interest, and truncate to this range
         return self.nphot_in_range*normed[self.fit_start_bin:(self.fit_end_bin+1)]
 
