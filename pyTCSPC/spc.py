@@ -11,7 +11,7 @@ from scipy.interpolate import interp1d
 from scipy.signal import fftconvolve, convolve
 import sys
 import time
-from tqdm.autonotebook import tqdm, trange
+from tqdm.notebook import tqdm, trange
 
 from .sdt import load_sdt, get_acqtime
 from .sdtfile import _sdt_file as raw_sdtfile
@@ -33,6 +33,7 @@ class SPC(object):
         n_lines_skip=1,
         show_progress=False,
         max_nframe=1e8,
+        nentries=None,
         read_paired_sdt=True,
         save_raw_traj=True,
         save_images=True
@@ -45,12 +46,16 @@ class SPC(object):
 
         if self.filepath.suffix == ".spc":
 
-            nentries = (os.path.getsize(filepath)/4) - 1
+            if nentries is None:
+                nentries = (os.path.getsize(filepath)/4) - 1
 
-            if nentries.is_integer():
-                nentries = int(nentries)
+                if nentries.is_integer():
+                    nentries = int(nentries)
+                else:
+                    raise ValueError("Error: number of bytes in file not evenly divisible by 4.")
             else:
-                raise ValueError("Error: number of bytes in file not evenly divisible by 4.")
+                # make sure it is an integer
+                nentries = int(nentries)
 
             if read_paired_sdt:
                 file = raw_sdtfile( self.get_filepath("sdt") )
@@ -200,37 +205,11 @@ class SPC(object):
             if save_images:
                 im_path = self.get_filepath(type="nc")
                 im_path = im_path.with_stem(im_path.stem + "_im")
-                
+
                 self.images.to_netcdf(
                     im_path,
                     mode="w",
-                    # mode=self.nc_filewrite_mode(),
-                    # engine="h5netcdf",
-                    # encoding={
-                    #     "intensity": {"zlib": True, "compression": 9},
-                    #     "lifetime sum": {"zlib": True, "compression": 9},
-                    # }
                 )
-
-
-        # elif filepath.suffix == ".h5":
-        #
-        #     with h5py.File(filepath, "r") as hf:
-        #         self.macro                      = np.array(hf.get("macro"))
-        #         self.micro                      = np.array(hf.get("micro"))
-        #         self.pixel                      = np.array(hf.get("pixel"), dtype=int)
-        #         self.line                       = np.array(hf.get("line"), dtype=int)
-        #         self.frame                      = np.array(hf.get("frame"), dtype=int)
-        #         self.pixels_per_line            = int(np.array(hf.get("pixels_per_line")))
-        #         self.nlines                     = int(np.array(hf.get("nlines")))
-        #         self.event_coord_list           = np.array(hf.get("event_coord_list"))
-        #         self.event_coord_list_framewise = np.array(hf.get("event_coord_list_framewise"))
-        #         self.pixel_bins                 = np.array(hf.get("pixel_bins"))
-        #         self.line_bins                  = np.array(hf.get("line_bins"))
-        #         self.frame_bins                 = np.array(hf.get("frame_bins"))
-        #         self.pixel_linearindex          = np.array(hf.get("pixel_linearindex"))
-        #         self.frame_idxs                 = np.array(hf.get("frame_idxs"))
-
         else:
             warnings.warn("Unrecognized file extension.")
             sys.exit()
@@ -302,7 +281,6 @@ class SPC(object):
 
         intensity, sum_tau = np.zeros_like(self.frame_idxs), np.zeros_like(self.frame_idxs)
         for iframe in self.frame_idxs:
-        #     print(iframe, event_frame[use_idxs])
             use_idxs = event_frame == iframe
             if np.sum(use_idxs) == 0:
                 intensity[iframe] = 0
