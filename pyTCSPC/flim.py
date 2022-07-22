@@ -29,7 +29,7 @@ else:
 class decay_group:
 
     def __init__(self,
-            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, modeltype="2exp", npx=1, manual_data=None, irf_kws={}
+            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, refcurve=None, modeltype="2exp", npx=1, manual_data=None, irf_kws={}
         ):
 
         self.t_irf        = irf["microtime_ns"].values
@@ -46,6 +46,7 @@ class decay_group:
             mask=mask,
             fit_start_bin=fit_start_bin,
             fit_end_bin=fit_end_bin,
+            refcurve=refcurve,
             npx=npx,
             manual_data=manual_data
         )
@@ -98,7 +99,7 @@ class decay_group:
             [[self.params[iparam]["min"], self.params[iparam]["max"], self.params[iparam]["step"]] for iparam in self.params]
         )
 
-    def load_data(self, data, mask=None, fit_start_bin=None, fit_end_bin=None, npx=1, manual_data=None):
+    def load_data(self, data, mask=None, fit_start_bin=None, fit_end_bin=None, refcurve=None, npx=1, manual_data=None):
 
         if (isinstance(data, np.ndarray) or isinstance(data, da.Array)) and len(data.shape) == 1:
             self.dc_data      = data
@@ -121,6 +122,13 @@ class decay_group:
             self.nphot_data   = np.sum(self.dc_data)
             # self.intensity    = self.nphot_data / self.data.npx
 
+        # load reference curve
+        if isinstance(refcurve, np.ndarray):
+            self.refcurve = refcurve
+        elif isinstance(refcurve, str) or isinstance(refcurve, PurePath):
+            self.refcurve = np.loadtxt(refcurve)
+        else:
+            self.refcurve = np.ones_like(self.dc_data)
 
         # select domain for fitting
         # default is to fit the region with zonzero values less a small buffer on either side
@@ -144,6 +152,7 @@ class decay_group:
 
         self.use_t          = self.t_data[self.fit_start_bin:(self.fit_end_bin+1)]
         self.use_data       = self.dc_data[self.fit_start_bin:(self.fit_end_bin+1)]
+        self.use_refcurve   = self.refcurve[self.fit_start_bin:(self.fit_end_bin+1)]
         self.nphot_in_range = np.sum(self.use_data)
 
         return True # success
@@ -193,8 +202,9 @@ class decay_group:
 
         # normalize to 1 within the time range of interest
         normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
-        # scale to number of photons within time range of interest, and truncate to this range
-        return self.nphot_in_range*normed[self.fit_start_bin:(self.fit_end_bin+1)]
+
+        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
+        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
 
     def model_2exp(self, shift, A, tau1, tau2, f):
 
@@ -224,8 +234,8 @@ class decay_group:
         # normalize to 1 within the time range of interest
         normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
 
-        # scale to number of photons within time range of interest, and truncate to this range
-        return self.nphot_in_range*normed[self.fit_start_bin:(self.fit_end_bin+1)]
+        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
+        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
 
     def model_3exp(self, shift, A, tau1, tau2, tau3, f1, f2):
 
@@ -255,8 +265,8 @@ class decay_group:
         # normalize to 1 within the time range of interest
         normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
 
-        # scale to number of photons within time range of interest, and truncate to this range
-        return self.nphot_in_range*normed[self.fit_start_bin:(self.fit_end_bin+1)]
+        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
+        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
 
     def model_4exp(self, shift, A, tau1, tau2, tau3, tau4, f1, f2, f3):
 
@@ -286,8 +296,8 @@ class decay_group:
         # normalize to 1 within the time range of interest
         normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
 
-        # scale to number of photons within time range of interest, and truncate to this range
-        return self.nphot_in_range*normed[self.fit_start_bin:(self.fit_end_bin+1)]
+        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
+        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
 
     def jac(self, yhat0, model, p, dp=None):
         """
@@ -604,7 +614,7 @@ class decay_group:
             self.model_fn = self.model_1exp
 
             self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -100 , "max":   100, "step": 1   },
+                "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
                 "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
                 "tau1":  {"value": 3.500, "err": np.nan, "min": 2.000, "max": 5.000, "step": 1e-3},
             }
