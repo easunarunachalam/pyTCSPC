@@ -12,4 +12,4 @@
 - read Becker &amp; Hickl .spc files into user-friendly `xarray.DataArray`s suitable for further analysis
 - generate FLIM and intensity images and "videos"
 - generate kymographs for line-scanning FCS
-- calculate correlation functions (based on [`multipletau`](https://github.com/FCS-analysis/multipletau)
+- calculate correlation functions (based on [`multipletau`](https://github.com/FCS-analysis/multipletau))
