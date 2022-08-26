@@ -13,3 +13,6 @@
 - generate FLIM and intensity images and "videos"
 - generate kymographs for line-scanning FCS
 - calculate correlation functions (based on [`multipletau`](https://github.com/FCS-analysis/multipletau))
+
+## environments
+- generate yaml files by `conda env export --no-builds > mmpy.yml`
