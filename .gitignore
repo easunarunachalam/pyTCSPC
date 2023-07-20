@@ -4,7 +4,6 @@ scraps
 .ipynb_checkpoints
 *-checkpoint.ipynb
 *.set
-*.spc
 *.swp
 *.dat
 old.py
