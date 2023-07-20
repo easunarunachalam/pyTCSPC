@@ -7,6 +7,7 @@ from .spc import *
 from .util import *
 
 from .flim import *
+from .multipletau import *
 
 from .batch import *
 from .plotting import *
