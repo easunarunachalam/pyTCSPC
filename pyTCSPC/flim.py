@@ -49,7 +49,7 @@ def resample_from_hist(h, n=1):
 class decay_group:
 
     def __init__(self,
-            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, refcurve=None, modeltype="2exp", npx=1, manual_data=None, irf_kws={}
+            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, fit_decaymask=None, refcurve=None, modeltype="2exp", npx=1, manual_data=None, irf_kws={}
         ):
 
         self.t_irf        = irf["microtime_ns"].values
@@ -74,6 +74,9 @@ class decay_group:
         with np.errstate(divide="ignore"):
             # my weights
             self.fit_weight_sq = np.divide(1., self.use_data)[:,np.newaxis]
+            if fit_decaymask is not None:
+                fit_decaymask = fit_decaymask[self.fit_start_bin:(self.fit_end_bin+1)]
+                self.fit_weight_sq = np.multiply(self.fit_weight_sq, fit_decaymask)
             self.fit_weight_sq[np.isinf(self.fit_weight_sq)] = 0
             self.fit_weight = np.sqrt(self.fit_weight_sq)
 
@@ -664,10 +667,18 @@ class decay_group:
             self.params = {
                 "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
                 "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
-                "tau2":  {"value": 1.000, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
+                "tau2":  {"value": 0.2, "err": np.nan, "min": 0.010, "max": 3.000, "step": 1e-3},
                 "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
             }
+            print("heldfdal")
+            # self.params = {
+            #     "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
+            #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+            #     "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
+            #     "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+            #     "f":     {"value": 0.7, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+            # }
 
             fix_p = [False]*5
             for fp in fixed_parameters:
@@ -692,7 +703,7 @@ class decay_group:
                 "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
                 "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
                 "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                "tau3":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                "tau3":  {"value": 0.200, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
                 "f1":    {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
                 "f2":    {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
             }
