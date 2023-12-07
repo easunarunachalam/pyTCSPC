@@ -43,7 +43,6 @@ from tqdm.notebook import tqdm, trange
 # else:
 #     from tqdm import tqdm, trange
 
-# def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=False):
 def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=True):
     """
     Read becker & hickl sdt file and return FLIM image data in the form of an xarray.DataArray
@@ -326,12 +325,13 @@ def decay_curve(
         if (fig is None) and (ax is None):
             fig, ax = plt.subplots(figsize=(6,4))
         ax.plot(flim_image["microtime_ns"].values, dc, label=label)
-        ax.set_xlabel(r"$t$/ns")
+        ax.set_xlabel(r"t/ns")
         if normalize:
             ax.set_ylabel(r"frequency")
         else:
             ax.set_ylabel(r"photons")
         ax.set_yscale("log")
+        plt.tight_layout()
 
         return fig, ax, dc
     else:
