@@ -49,7 +49,7 @@ def resample_from_hist(h, n=1):
 class decay_group:
 
     def __init__(self,
-            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, fit_decaymask=None, refcurve=None, modeltype="2exp", npx=1, manual_data=None, irf_kws={}
+            data, irf, t_data=[], mask=None, fit_start_bin=None, fit_end_bin=None, fit_decaymask=None, refcurve=None, npx=1, manual_data=None, irf_kws={}
         ):
 
         self.t_irf        = irf["microtime_ns"].values
@@ -623,6 +623,7 @@ class decay_group:
     def fit(
             self,
             model="2exp",
+            parameters=None,
             fixed_parameters=[],
             method="custom_leastsq",
             method_args={},
@@ -633,14 +634,16 @@ class decay_group:
         ):
 
         if model == "1exp":
-
             self.model_fn = self.model_1exp
 
-            self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
-                "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                "tau1":  {"value": 3.500, "err": np.nan, "min": 2.000, "max": 5.000, "step": 1e-3},
-            }
+            if parameters is None:
+                self.params = {
+                    "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
+                    "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                    "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 5.000, "step": 1e-3},
+                }
+            else:
+                self.params = parameters
 
             fix_p = [False]*3
             for fp in fixed_parameters:
@@ -657,34 +660,37 @@ class decay_group:
 
             self.model_fn = self.model_2exp
 
-            # self.params = {
-            #     "shift": {"value": 0    , "err": np.nan, "min": -30  , "max":    30, "step": 1   },
-            #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-            #     "tau1":  {"value": 3.500, "err": np.nan, "min": 2.000, "max": 5.000, "step": 1e-3},
-            #     "tau2":  {"value": 1.000, "err": np.nan, "min": 0.010, "max": 0.800, "step": 1e-3},
-            #     "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3}
-            # }
-            self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
-                "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
-                "tau2":  {"value": 0.2, "err": np.nan, "min": 0.010, "max": 3.000, "step": 1e-3},
-                "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-            }
-            self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -100 , "max":   100, "step": 1   },
-                "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                "tau1":  {"value": 1.8, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
-                "tau2":  {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                "f":     {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-            }
-            # self.params = {
-            #     "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
-            #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-            #     "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
-            #     "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-            #     "f":     {"value": 0.7, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-            # }
+            if parameters is None:
+                # self.params = {
+                #     "shift": {"value": 0    , "err": np.nan, "min": -30  , "max":    30, "step": 1   },
+                #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                #     "tau1":  {"value": 3.500, "err": np.nan, "min": 2.000, "max": 5.000, "step": 1e-3},
+                #     "tau2":  {"value": 1.000, "err": np.nan, "min": 0.010, "max": 0.800, "step": 1e-3},
+                #     "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3}
+                # }
+                self.params = {
+                    "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
+                    "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                    "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
+                    "tau2":  {"value": 0.2, "err": np.nan, "min": 0.010, "max": 3.000, "step": 1e-3},
+                    "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                }
+                self.params = {
+                    "shift": {"value": 0    , "err": np.nan, "min": -100 , "max":   100, "step": 1   },
+                    "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                    "tau1":  {"value": 1.8, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
+                    "tau2":  {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                    "f":     {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                }
+                # self.params = {
+                #     "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
+                #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                #     "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
+                #     "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                #     "f":     {"value": 0.7, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                # }
+            else:
+                self.params = parameters
 
             fix_p = [False]*5
             for fp in fixed_parameters:
@@ -704,15 +710,18 @@ class decay_group:
 
             self.model_fn = self.model_3exp
 
-            self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
-                "A":     {"value": 0.99, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
-                "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                "tau3":  {"value": 0.200, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                "f1":    {"value": 0.15, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                "f2":    {"value": 0.40, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-            }
+            if parameters is None:
+                self.params = {
+                    "shift": {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
+                    "A":     {"value": 0.99, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                    "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
+                    "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                    "tau3":  {"value": 0.200, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                    "f1":    {"value": 0.15, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                    "f2":    {"value": 0.40, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                }
+            else:
+                self.params = parameters
 
             fix_p = [False]*7
             for fp in fixed_parameters:
@@ -736,17 +745,20 @@ class decay_group:
 
             self.model_fn = self.model_4exp
 
-            self.params = {
-                "shift": {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
-                "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
-                "tau2":  {"value": 0.600, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
-                "tau3":  {"value": 1.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
-                "tau4":  {"value": 0.400, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
-                "f1":    {"value": 0.200, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
-                "f2":    {"value": 0.300, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
-                "f3":    {"value": 0.500, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
-            }
+            if parameters is None:
+                self.params = {
+                    "shift": {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
+                    "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                    "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
+                    "tau2":  {"value": 0.600, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                    "tau3":  {"value": 1.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
+                    "tau4":  {"value": 0.400, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                    "f1":    {"value": 0.200, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                    "f2":    {"value": 0.300, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                    "f3":    {"value": 0.500, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
+                }
+            else:
+                self.params = parameters
 
             fix_p = [False]*9
             for fp in fixed_parameters:
@@ -828,6 +840,9 @@ class decay_group:
         #         out = m.minimize(method=method, **method_args)
         #
         #     self.params = out.params.copy()
+        else:
+            print("")
+            raise ValueError("Unknown fitting method specified")
 
         if verbose:
             print(self.fit_params())
