@@ -4,15 +4,19 @@ __all__ = [
     "zarr_groups",
     "open_zarr_to_xds",
     "concat_zarr_datasets",
+    "get_intensity_images"
 ]
 
+from itertools import chain
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from tqdm.autonotebook import tqdm
 import xarray as xr
 import zarr
 
 from .sdt import *
+from .util import *
 
 def abbrev_coord_data(coord_data, exclude_longer_than=10):
     data = coord_data.flatten()
@@ -134,3 +138,25 @@ def reshape_for_pos_tpt(da, num_positions, ragged="trim"):
     new_da = new_da.assign_coords(additional_coords)
 
     return new_da
+
+def get_intensity_images(use_dir_names, zarr_location="processed_data.zarr"):
+    """
+    Retrieve intensity images from zarr store whose source files are within directories contained in the list `use_dir_names`
+    """
+
+    zarr_stores = list(list_files(".", pattern=zarr_location))
+    zarr_groups_flat = np.array(list(chain(*[zarr_groups(str(zarr_store)) for zarr_store in tqdm(zarr_stores, desc="flatten zarr groups")])))
+
+    parent_dirs = [open_zarr_group_to_xds(izgf).parent_directory.data for izgf in tqdm(zarr_groups_flat, desc="get parent directories")]
+    parent_dirs = np.squeeze(np.array(parent_dirs))
+    idx_use_parent_dirs = np.where([(str(parent_dir) in use_dir_names) for parent_dir in parent_dirs])[0]
+
+    ims = []
+    for i in tqdm(idx_use_parent_dirs, desc="retrieve intensity images"):
+        i_da = open_zarr_group_to_xds( zarr_groups_flat[i] )["intensity"]
+        ims.append(i_da)
+
+    da = xr.concat(ims, dim="file_info").transpose("file_info", "y", "x")
+    # da = da.isel(file_info=np.argsort(da["acqtime"].values))
+
+    return da, parent_dirs[idx_use_parent_dirs], zarr_groups_flat[idx_use_parent_dirs]
