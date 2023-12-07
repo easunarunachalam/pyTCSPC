@@ -671,7 +671,13 @@ class decay_group:
                 "tau2":  {"value": 0.2, "err": np.nan, "min": 0.010, "max": 3.000, "step": 1e-3},
                 "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
             }
-            print("heldfdal")
+            self.params = {
+                "shift": {"value": 0    , "err": np.nan, "min": -100 , "max":   100, "step": 1   },
+                "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                "tau1":  {"value": 1.8, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
+                "tau2":  {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                "f":     {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+            }
             # self.params = {
             #     "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
             #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
@@ -700,12 +706,12 @@ class decay_group:
 
             self.params = {
                 "shift": {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
-                "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                "A":     {"value": 0.99, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
                 "tau1":  {"value": 3.500, "err": np.nan, "min": 1.000, "max": 9.000, "step": 1e-3},
                 "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
                 "tau3":  {"value": 0.200, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                "f1":    {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                "f2":    {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                "f1":    {"value": 0.15, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
+                "f2":    {"value": 0.40, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
             }
 
             fix_p = [False]*7
