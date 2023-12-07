@@ -10,13 +10,8 @@ from pathlib import Path, PurePath, PureWindowsPath
 from scipy.interpolate import interp1d
 from scipy.signal import fftconvolve, convolve
 import sys
-sys.path.append(r"R:\OneDrive - Harvard University\lab-needleman\code\error_propagation-dev")
+
 from typing import Union
-import time
-from tqdm.notebook import tqdm, trange
-
-# from error_propagation import Complex
-
 
 if "xarray" in sys.modules:
     import xarray as xr
@@ -65,6 +60,9 @@ def ProgressParallel(_TOTAL, *args, **kwargs):
     return _ProgressParallel(*args, **kwargs)
 
 def list_files(folder=".", pattern=None, exclude_in_names=["calibration",]):
+    """
+    List all files and folders that match `pattern`, excluding specified names
+    """
     for root, folders, files in os.walk(folder):
         for filename in folders + files:
             path = PurePath(os.path.join(root, filename))
