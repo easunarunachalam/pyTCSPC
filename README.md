@@ -16,3 +16,9 @@
 
 ## environments
 - generate yaml files by `conda env export --no-builds > mmpy.yml`
+
+## examples
+- `FCS`: fit FCS data for diffusion of Alexa Fluor 488 (to be updated)
+- `fit_oneexp`: fit decay curve for a solution of FAD (to be updated)
+- `fit_from_image`: fit decay curve for NAD(P)H in yeast
+- `Gibbssampling`: to be updated
