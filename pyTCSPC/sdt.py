@@ -196,19 +196,21 @@ def mean_lifetime_image(input_flim_image, valid_pixel_mask=None, microtimes=None
 
         flim_image = input_flim_image.data
         x_size, y_size = input_flim_image.x.size, input_flim_image.y.size
-        intensity_image = input_flim_image.sum(dim="microtime_ns").data
+        intensity_image = input_flim_image.sum(dim="microtime_ns").squeeze().data
+        print("shape", intensity_image.shape)
         microtimes = input_flim_image.microtime_ns.data
 
     else:
 
         flim_image = input_flim_image
         x_size, y_size = input_flim_image.shape[1], input_flim_image.shape[0]
-        intensity_image = input_flim_image.sum(axis=-1)
+        intensity_image = input_flim_image.sum(axis=-1).squeeze()
         if microtimes is None:
             raise TypeError("'microtimes' array must be provided if 'input_flim_image' is not xarray.DataArray.")
 
     intensity_tile = np.repeat( intensity_image[:,:,np.newaxis], microtimes.size, axis=-1 )
     microtime_tile = np.tile( microtimes, (y_size, x_size, 1) )
+    flim_image = flim_image.squeeze()
 
     sum_lifetime_image = np.multiply(
         flim_image,
@@ -217,18 +219,19 @@ def mean_lifetime_image(input_flim_image, valid_pixel_mask=None, microtimes=None
 
     sum_lifetime_image_masked = np.multiply(sum_lifetime_image, valid_pixel_mask)
     intensity_image_masked = np.multiply(intensity_image, valid_pixel_mask)
-    # with np.errstate(divide='ignore'):
-    #     mean_lifetime_image = np.divide(sum_lifetime_image_masked, intensity_image_masked)
-    #     mean_lifetime_image[np.isnan(mean_lifetime_image)] = 0
 
-    sum_lifetime_blur = gaussian(sum_lifetime_image_masked, sigma=sigma)
-    intensity_blur = gaussian(intensity_image_masked, sigma=sigma)
-    with np.errstate(divide='ignore'):
+    sum_lifetime_blur = gaussian(sum_lifetime_image_masked, sigma=sigma, preserve_range=True).squeeze()
+    intensity_blur = gaussian(intensity_image_masked, sigma=sigma, preserve_range=True).squeeze()
+    
+    with np.errstate(divide="ignore"):
         mean_lifetime_image_blur = np.divide(sum_lifetime_blur, intensity_blur)
-        mean_lifetime_image_blur[np.isnan(mean_lifetime_image_blur)] = 0
+        
     mean_lifetime_image_blur = np.multiply(mean_lifetime_image_blur, valid_pixel_mask)
     mean_lifetime_image_corrected = mean_lifetime_image_blur - subtract_constant_lifetime
 
+    mean_lifetime_image_corrected[~valid_pixel_mask] = 0
+
+    # return flim_image, microtime_tile, sum_lifetime_blur, intensity_blur, mean_lifetime_image_blur, sum_lifetime_image, mean_lifetime_image_blur, intensity_image_masked
     return mean_lifetime_image_corrected
 
 def calculate_mean_lifetime_images(da_flim, da_segmentation, subtract_constant_lifetime=0):
@@ -413,6 +416,7 @@ def convert_sdts(
     conversion_list,
     channel_names,
     correction_mask=None,
+    type="zarr",
     archive_path="processed_data.zarr",
     sync_path="zarr_writer.sync",
     overwrite=False,
@@ -449,7 +453,12 @@ def convert_sdts(
             intensity=intensity_img
         ))
 
-        ds.to_zarr(archive_path, mode="a", group=group_name, synchronizer=synchronizer, consolidated=False)
+        if type == "zarr":
+            ds.to_zarr(archive_path, mode="a", group=group_name, synchronizer=synchronizer, consolidated=False)
+        elif type == "nc":
+            ds.to_zarr(archive_path, mode="a", group=group_name, synchronizer=synchronizer, consolidated=False)
+        else:
+            raise ValueError("Unrecognized type for saving.")
 
     class ProgressParallel(Parallel):
         def __call__(self, *args, **kwargs):
