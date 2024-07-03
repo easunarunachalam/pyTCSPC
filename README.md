@@ -1,7 +1,6 @@
 # pyTCSPC
 
 ## a Python library for fluorescence lifetime imaging microscopy (FLIM) and fluorescence correlation spectroscopy (FCS) data analysis:
-🚧 **Experimental -- there will frequently be breaking changes**
 
 ### FLIM functions
 - read Becker &amp; Hickl .sdt files (based on [`sdtfile`](https://github.com/cgohlke/sdtfile)) into user-friendly `xarray.DataArray`s suitable for further analysis
@@ -18,7 +17,7 @@
 - generate yaml files by `conda env export --no-builds > mmpy.yml`
 
 ## examples
-- `FCS`: fit FCS data for diffusion of Alexa Fluor 488 (to be updated)
-- `fit_oneexp`: fit decay curve for a solution of FAD (to be updated)
+- `FCS`: fit FCS data for diffusion of Alexa Fluor 488
+- `fit_oneexp`: fit decay curve for a solution of FAD
 - `fit_from_image`: fit decay curve for NAD(P)H in yeast
 - `Gibbssampling`: to be updated
