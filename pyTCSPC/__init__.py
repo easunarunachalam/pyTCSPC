@@ -1,5 +1,6 @@
 from ._version import __version__
 
+from .presets import *
 from .sdtfile import *
 
 from .sdt import *
