@@ -3,25 +3,18 @@ __all__ = [
     "decay_group",
 ]
 
-from copy import deepcopy
 import dask.array as da
-from datetime import datetime
-import glob
-import imageio as iio
-import itertools
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pandas as pd
-from pathlib import Path, PurePath, PureWindowsPath
-from scipy.interpolate import interp1d
+from pathlib import PurePath
 from scipy.optimize import least_squares, leastsq
 from scipy.signal import fftconvolve
 import sys
 
 import warnings
-import xarray as xr
 
+from .presets import *
 from .util import *
 from .sdt import *
 from .sdt import decay_curve
@@ -197,11 +190,38 @@ class decay_group:
         mean_noise = np.mean(self.dc_data[idx_noise_region_start:(idx_noise_region_end+1)])
 
         return 1 - mean_noise/np.max(self.dc_data)
-
-    def model_1exp(self, shift, A, tau1):
+    
+    def rawmodel_to_fullmodel(self, rawmodel, shift):
+        """
+        Given a single-exponential or sum-of-exponentials model, compute the convolution with the
+        instrument response function, normalize, and correct using the reference curve to prepare
+        it to use as a full fitting function.
+        """
 
         # number of time bins (IRF time bin size) in a single laser period
         nbins_laser_period = int(self.laser_period/self.dt_irf)
+
+        # duplicate model (add second period)
+        dup_model = np.concatenate((rawmodel, rawmodel))
+
+        # convolve model with IRF
+        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
+        cnv       = fftconvolve(roll_irf, dup_model)
+
+        # keep the second period of the convolution
+        keep_start, keep_end = nbins_laser_period + 1, nbins_laser_period + 1 + self.nbins_irf
+        p2        = cnv[keep_start:keep_end]
+
+        # collapse down to the same number of bins as the data
+        rshp      = np.sum(np.reshape(p2, (self.nbins_data, self.adc_ratio)), axis=1)
+
+        # normalize to 1 within the time range of interest
+        normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
+
+        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
+        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
+
+    def model_1exp(self, shift, A, tau1):
 
         # time = one laser period
         t      = np.arange(0, self.laser_period, self.dt_irf)
@@ -209,30 +229,9 @@ class decay_group:
         # values of model over this period
         model  = (1-A) + A*np.exp(-t/tau1)
 
-        # duplicate model (add second period)
-        dup_model = np.concatenate((model, model))
-
-        # convolve model with IRF
-        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
-        cnv       = fftconvolve(roll_irf, dup_model)
-
-        # keep the second period of the convolution
-        keep_start, keep_end = nbins_laser_period + 1, nbins_laser_period + 1 + self.nbins_irf
-        p2        = cnv[keep_start:keep_end]
-
-        # collapse down to the same number of bins as the data
-        rshp      = np.sum(np.reshape(p2, (self.nbins_data, self.adc_ratio)), axis=1)
-
-        # normalize to 1 within the time range of interest
-        normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
-
-        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
-        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
+        return self.rawmodel_to_fullmodel(model, shift)
 
     def model_2exp(self, shift, A, tau1, tau2, f):
-
-        # number of time bins (IRF time bin size) in a single laser period
-        nbins_laser_period = int(self.laser_period/self.dt_irf)
 
         # time = one laser period
         t      = np.arange(0, self.laser_period, self.dt_irf)
@@ -240,30 +239,9 @@ class decay_group:
         # values of model over this period
         model  = (1-A) + A*(f*np.exp(-t/tau1) + (1-f)*np.exp(-t/tau2))
 
-        # duplicate model (add second period)
-        dup_model = np.concatenate((model, model))
-
-        # convolve model with IRF
-        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
-        cnv       = fftconvolve(roll_irf, dup_model)
-
-        # keep the second period of the convolution
-        keep_start, keep_end = nbins_laser_period + 1, nbins_laser_period + 1 + self.nbins_irf
-        p2        = cnv[keep_start:keep_end]
-
-        # collapse down to the same number of bins as the data
-        rshp      = np.sum(np.reshape(p2, (self.nbins_data, self.adc_ratio)), axis=1)
-
-        # normalize to 1 within the time range of interest
-        normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
-
-        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
-        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
+        return self.rawmodel_to_fullmodel(model, shift)
 
     def model_3exp(self, shift, A, tau1, tau2, tau3, f1, f2):
-
-        # number of time bins (IRF time bin size) in a single laser period
-        nbins_laser_period = int(self.laser_period/self.dt_irf)
 
         # time = one laser period
         t      = np.arange(0, self.laser_period, self.dt_irf)
@@ -271,30 +249,9 @@ class decay_group:
         # values of model over this period
         model  = (1-A) + A*(f1*np.exp(-t/tau1) + (1-f1)*(f2*np.exp(-t/tau2) + (1-f2)*np.exp(-t/tau3)))
 
-        # duplicate model (add second period)
-        dup_model = np.concatenate((model, model))
-
-        # convolve model with IRF
-        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
-        cnv       = fftconvolve(roll_irf, dup_model)
-
-        # keep the second period of the convolution
-        keep_start, keep_end = nbins_laser_period + 1, nbins_laser_period + 1 + self.nbins_irf
-        p2        = cnv[keep_start:keep_end]
-
-        # collapse down to the same number of bins as the data
-        rshp      = np.sum(np.reshape(p2, (self.nbins_data, self.adc_ratio)), axis=1)
-
-        # normalize to 1 within the time range of interest
-        normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
-
-        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
-        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
+        return self.rawmodel_to_fullmodel(model, shift)
 
     def model_4exp(self, shift, A, tau1, tau2, tau3, tau4, f1, f2, f3):
-
-        # number of time bins (IRF time bin size) in a single laser period
-        nbins_laser_period = int(self.laser_period/self.dt_irf)
 
         # time = one laser period
         t      = np.arange(0, self.laser_period, self.dt_irf)
@@ -302,25 +259,51 @@ class decay_group:
         # values of model over this period
         model  = (1-A) + A*(f1*np.exp(-t/tau1) + (1-f1)*(f2*np.exp(-t/tau2) + (1-f2)*(f3*np.exp(-t/tau3) + (1-f3)*np.exp(-t/tau4))))
 
-        # duplicate model (add second period)
-        dup_model = np.concatenate((model, model))
+        return self.rawmodel_to_fullmodel(model, shift)
 
-        # convolve model with IRF
-        roll_irf  = np.roll(self.dc_irf, int(np.round(shift)))
-        cnv       = fftconvolve(roll_irf, dup_model)
+    def model_polyexp(
+        self, shift, A, *args, min_tau=0.01, max_tau=5.0, n_tau=200
+    ):
+        """
+        Sum of many exponentials, with weights given by a sum of gaussians with amplitudes in `gaussian_amp`, means in `gaussian_mus`, and standard deviations in `gaussian_sigmas`
+        """
 
-        # keep the second period of the convolution
-        keep_start, keep_end = nbins_laser_period + 1, nbins_laser_period + 1 + self.nbins_irf
-        p2        = cnv[keep_start:keep_end]
+        # read in parameters of gaussians
+        assert (len(args)+1) % 3 == 0
+        n_gaussians = (len(args)+1) // 3
 
-        # collapse down to the same number of bins as the data
-        rshp      = np.sum(np.reshape(p2, (self.nbins_data, self.adc_ratio)), axis=1)
+        gaussian_amps, gaussian_mus, gaussian_sigmas = [], [], []
 
-        # normalize to 1 within the time range of interest
-        normed    = rshp/np.sum(rshp[self.fit_start_bin:(self.fit_end_bin+1)])
+        for iarg in range(2*n_gaussians):
+            gaussian_mus.append(args[iarg])
+            gaussian_sigmas.append(args[iarg+1])
 
-        # scale to number of photons within time range of interest, truncate to this range, and scale by reference curve
-        return self.use_refcurve * self.nphot_in_range * normed[self.fit_start_bin:(self.fit_end_bin+1)]
+        for iarg in range(2*n_gaussians,len(args)):
+            gaussian_amps.append(args[iarg])
+
+        # enforce amplitude sum = 1
+        # gaussian_amps = gaussian_amps / np.sum(gaussian_amps)
+        gaussian_amps.append( 1. - np.sum(gaussian_amps) )
+        gaussian_amps, gaussian_mus, gaussian_sigmas = np.array(gaussian_amps), np.array(gaussian_mus), np.array(gaussian_sigmas)
+
+        log_min_tau, log_max_tau = np.log10(min_tau), np.log10(max_tau)
+        log_taus = np.linspace(log_min_tau, log_max_tau, n_tau)
+        taus = 10**log_taus
+
+        t = np.arange(0, self.laser_period, self.dt_irf)
+        tile_taus = np.tile(taus, (len(t),1))
+        tile_microtimes = np.tile(t, (len(taus), 1)).T
+        exps = np.exp(-np.divide(tile_microtimes,tile_taus))
+
+        exp_weights_from_each_gaussian = np.array([gaussian_amp*_gaussian(taus, gaussian_mu, gaussian_sigma) for gaussian_amp, gaussian_mu, gaussian_sigma in zip(gaussian_amps, gaussian_mus, gaussian_sigmas)])
+        exp_weights = np.sum(exp_weights_from_each_gaussian, axis=0)
+        tile_exp_weights = np.tile(exp_weights, (len(t), 1))
+
+        exps_only = np.multiply(tile_exp_weights, exps).sum(axis=1)
+
+        model = (1-A) + A*exps_only
+
+        return self.rawmodel_to_fullmodel(model, shift)
 
     def jac(self, yhat0, model, p, dp=None):
         """
@@ -661,34 +644,7 @@ class decay_group:
             self.model_fn = self.model_2exp
 
             if parameters is None:
-                # self.params = {
-                #     "shift": {"value": 0    , "err": np.nan, "min": -30  , "max":    30, "step": 1   },
-                #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                #     "tau1":  {"value": 3.500, "err": np.nan, "min": 2.000, "max": 5.000, "step": 1e-3},
-                #     "tau2":  {"value": 1.000, "err": np.nan, "min": 0.010, "max": 0.800, "step": 1e-3},
-                #     "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3}
-                # }
-                self.params = {
-                    "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
-                    "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                    "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
-                    "tau2":  {"value": 0.2, "err": np.nan, "min": 0.010, "max": 3.000, "step": 1e-3},
-                    "f":     {"value": 0.405, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                }
-                self.params = {
-                    "shift": {"value": 0    , "err": np.nan, "min": -100 , "max":   100, "step": 1   },
-                    "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                    "tau1":  {"value": 1.8, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
-                    "tau2":  {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                    "f":     {"value": 0.25, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                }
-                # self.params = {
-                #     "shift": {"value": 0    , "err": np.nan, "min": -200 , "max":   200, "step": 1   },
-                #     "A":     {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                #     "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 9.000, "step": 1e-3},
-                #     "tau2":  {"value": 0.500, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                #     "f":     {"value": 0.7, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
-                # }
+                self.params = NADH_2EXP_INIT
             else:
                 self.params = parameters
 
@@ -782,6 +738,45 @@ class decay_group:
                     fix_p[8] = True
                 else:
                     raise ValueError("Invalid parameter name.")
+                
+        elif model == "polyexp":
+
+            self.model_fn = self.model_polyexp
+
+            if parameters is None:
+                self.params = {
+                    "shift":  {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
+                    "A":      {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
+                    "amp1":   {"value": 0.8, "err": np.nan, "min": 0.000, "max": 1.00, "step": 1e-3},
+                    "mu1":    {"value": 0.2, "err": np.nan, "min": 0.001, "max": 10.0, "step": 1e-3},
+                    "sigma1": {"value": 0.1, "err": np.nan, "min": 0.001, "max": 1.00, "step": 1e-3},
+                    "amp2":   {"value": 0.2, "err": np.nan, "min": 0.000, "max": 1.00, "step": 1e-3},
+                    "mu2":    {"value": 2.0, "err": np.nan, "min": 0.001, "max": 10.0, "step": 1e-3},
+                    "sigma2": {"value": 0.5, "err": np.nan, "min": 0.001, "max": 1.00, "step": 1e-3},
+                }
+            else:
+                self.params = parameters
+
+            fix_p = [False]*len(self.params)
+            # for fp in fixed_parameters:
+            #     if fp == "shift":
+            #         fix_p[0] = True
+            #     elif fp == "A":
+            #         fix_p[1] = True
+            #     elif fp == "amp1":
+            #         fix_p[2] = True
+            #     elif fp == "mu1":
+            #         fix_p[3] = True
+            #     elif fp == "sigma1":
+            #         fix_p[4] = True
+            #     elif fp == "amp2":
+            #         fix_p[5] = True
+            #     elif fp == "mu2":
+            #         fix_p[6] = True
+            #     elif fp == "sigma2":
+            #         fix_p[7] = True
+            #     else:
+            #         raise ValueError("Invalid parameter name.")
 
         else:
             raise ValueError("Unrecognized model type.")
@@ -803,7 +798,8 @@ class decay_group:
 
             lims = self.get_param_lims()
             pmin, pmax, dp = lims[:,0], lims[:,1], lims[:,2]
-            init_params = np.mean(lims[:,0:2], axis=1)
+            # init_params = np.mean(lims[:,0:2], axis=1)
+            init_params = self.get_param_values()[:,0]
             init_params[1] = self.est_A()
 
             for i, val in enumerate(fix_p):
@@ -930,3 +926,12 @@ class decay_group:
             plt.close(fig)
         else:
             plt.show()
+
+
+def _gaussian(x, mu, sigma):
+    """
+    Normal distribution
+    use for polyexp fitting
+    """
+    norm_factor = (1./np.sqrt(2*np.pi)) * (1/sigma)
+    return norm_factor * np.exp(-((x-mu)/sigma)**2)
