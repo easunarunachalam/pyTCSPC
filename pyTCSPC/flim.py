@@ -8,9 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pathlib import PurePath
-from scipy.optimize import least_squares, leastsq
 from scipy.signal import fftconvolve
-import sys
 
 import warnings
 
@@ -20,9 +18,9 @@ from .sdt import *
 from .sdt import decay_curve
 
 if isnotebook():
-    from tqdm.notebook import tqdm, trange
+    from tqdm.notebook import trange
 else:
-    from tqdm import tqdm, trange
+    from tqdm import trange
 
 def resample_from_hist(h, n=1):
     """

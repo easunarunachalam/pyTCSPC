@@ -1,3 +1,7 @@
+__all__ = [
+    "plot_timelapse"
+]
+
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -71,15 +75,3 @@ def plot_timelapse(df_sel, t_start=None, t_end=None, t_start2=None, t_end2=None,
     plt.tight_layout()
 
     return fig, ax
-
-    #
-    # if (t_start2 is not None) and (t_end2 is not None):
-    #     use_for_eq = np.logical_and(
-    #         df_sel["elapsed time"].values >= t_start2,
-    #         df_sel["elapsed time"].values <= t_end2,
-    #     )
-    #
-    #     if f_eq_mito is None:
-    #         f_eq_mito = np.mean(df_sel.loc[use_for_eq & (df["channel"]=="mitochondria"), "f"].values)
-    #     if f_eq_cyto is None:
-    #         f_eq_cyto = np.mean(df_sel.loc[use_for_eq & (df["channel"]=="cytoplasm"), "f"].values)

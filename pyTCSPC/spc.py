@@ -1,19 +1,13 @@
-from datetime import datetime
-import glob
-import h5py
-import imageio as iio
-import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+__all__ = [
+    "SPC",
+]
+
 import numpy as np
 import os
-from pathlib import Path, PurePath, PureWindowsPath
-from scipy.interpolate import interp1d
-from scipy.signal import fftconvolve, convolve
 import sys
-import time
-from tqdm.notebook import tqdm, trange
+from tqdm.notebook import tqdm
 
-from .sdt import load_sdt, get_acqtime
+from .sdt import get_acqtime
 from .sdtfile import _sdt_file as raw_sdtfile
 from .util import bits
 import xarray as xr

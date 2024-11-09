@@ -1,3 +1,7 @@
+__all__ = [
+    "calc_acf",
+]
+
 import numpy as np
 import xarray as xr
 from .multipletau import autocorrelate

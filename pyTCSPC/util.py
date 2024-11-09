@@ -1,14 +1,33 @@
-from datetime import datetime
-import glob
+__all__ = [
+    "isnotebook",
+    "ProgressParallel",
+    "list_files",
+    "contains_any_targets",
+    "dirs_fns_to_process",
+    "h5_to_dict",
+    "print_h5",
+    "filewrite_mode",
+    "within_percentile",
+    "_zoom_image",
+    "_intensity_correction_mask_ndarray",
+    "intensity_correction_mask",
+    "resample_image",
+    "xda_changedatasize",
+    "colorbar",
+    "categorical_colormap",
+    "tdiff_to_min",
+    "datetime_to_mins",
+    "delta_to_minutes",
+    "bits",
+    "PlatformPath",
+]
+
 import h5py
-import imageio as iio
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 import os
-from pathlib import Path, PurePath, PureWindowsPath
-from scipy.interpolate import interp1d
-from scipy.signal import fftconvolve, convolve
+from pathlib import Path, PurePath
 import sys
 
 from typing import Union
@@ -16,14 +35,11 @@ from typing import Union
 # if "xarray" in sys.modules:
 import xarray as xr
 
-import imageio
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from skimage.filters import rank, gaussian
-from skimage.segmentation import watershed
-from skimage.morphology import disk
+from skimage.filters import gaussian
 from skimage.transform import rescale
 
 def isnotebook():
@@ -84,20 +100,6 @@ def dirs_fns_to_process(folder=".", pattern=None):
 def h5_to_dict(path):
     with h5py.File(path, "r") as hf:
         return { key: np.array(hf[key]) for key in list(hf.keys()) }
-
-# frame = line = pixel = np.random.rand((10000))
-#
-# h5_filepath = Path("test.h5")
-#
-# with h5py.File(h5_filepath, "w") as hf:
-#     hf.create_dataset("raw/frame", data=frame)
-#     hf.create_dataset("raw/line", data=line)
-#     hf.create_dataset("raw/pixel", data=pixel)
-#     hf.create_dataset("raw/microtimel", data=pixel)
-#
-#     hf.create_dataset("traces/frame_time", data=frame_time)
-#     hf.create_dataset("traces/intensity", data=intensity)
-#     hf.create_dataset("traces/sum_lifetime", data=sum_lifetime)
 
 def print_h5(h5_obj, indent_level=0, indent_str="  "):
     """
@@ -291,19 +293,8 @@ def bits(f):
         for i in range(8):
             yield (b >> i) & 1
 
-# def val_err(vals, errs=0):
-#     if (type(vals) == list) or (type(vals) == np.ndarray):
-#         if (type(errs) == list) or (type(errs) == np.ndarray):
-#             return np.array([Complex(val, err) for val, err in zip(vals, errs)])
-#         else:
-#             return np.array([Complex(val, errs) for val in vals])
-#     else:
-#         return Complex(vals, errs)
-
 def PlatformPath(filepath):
     if sys.platform == "linux":
         filepath = filepath.replace("\\\\", "/").replace("\\", "/")
 
     return Path(filepath)
-
-# 89219-272
