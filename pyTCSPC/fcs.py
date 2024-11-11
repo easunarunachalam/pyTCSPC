@@ -4,7 +4,7 @@ __all__ = [
 
 import numpy as np
 import xarray as xr
-from .multipletau import autocorrelate
+from multipletau import autocorrelate
 
 def calc_acf(nc_fn, dt=1e-6, m=16, maxtime=None, maxtime_subtraj=None):
     all_photons = xr.load_dataset( nc_fn )

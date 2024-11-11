@@ -32,7 +32,6 @@ import sys
 
 from typing import Union
 
-# if "xarray" in sys.modules:
 import xarray as xr
 
 import joblib

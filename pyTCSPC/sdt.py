@@ -15,33 +15,23 @@ __all__ = [
     "acq_index_to_pos_t",
 ]
 
-import copy
-import dask.array as da
 from datetime import datetime
+import glob
 from joblib import Parallel, delayed
 import matplotlib.pyplot as plt
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Union
 import numpy as np
-import pandas as pd
 import re
-import warnings
+from skimage.filters import gaussian
 import xarray as xr
 import zarr
 
-from .sdtfile import _sdt_file as raw_sdtfile
+from sdtfile import SdtFile as raw_sdtfile
 
-
-# sys.path.append("./")
-# import sys
 from .util import *
 
-from tqdm.notebook import tqdm, trange
-
-# if isnotebook():
-#     from tqdm.notebook import tqdm, trange
-# else:
-#     from tqdm import tqdm, trange
+from tqdm.autonotebook import tqdm
 
 def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=True):
     """
@@ -382,7 +372,7 @@ def sdt_conversion_list(
     """
 
     if (main_dir is None) and (fns is not None):
-        _
+        _ = _
     elif (main_dir is not None) and (fns is None):
         main_dir = Path(main_dir)
         fns = np.sort(list(list_files(folder=main_dir, pattern="*.sdt", exclude_in_names=exclude_in_names)))
