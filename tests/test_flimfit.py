@@ -5,7 +5,7 @@ import pytest
 import sys
 sys.path.append("../")
 
-import pyTCSPC as pc
+import pytcspc as pc
 
 
 @pytest.fixture

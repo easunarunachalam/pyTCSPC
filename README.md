@@ -1,4 +1,4 @@
-# pyTCSPC
+# pytcspc
 
 ## a Python library for fluorescence lifetime imaging microscopy (FLIM) and fluorescence correlation spectroscopy (FCS) data analysis:
 

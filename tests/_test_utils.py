@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import pyTCSPC as pc
+import pytcspc as pc
 
 def test_zoom(plot=False):
 
