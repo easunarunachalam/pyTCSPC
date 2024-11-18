@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
@@ -40,8 +40,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/easunarunachalam/pyTCSPC"
 
+
 [tool.hatch.version]
-path = "src/pytcspc/__init__.py"
+source = "vcs"
 
 [tool.hatch.build.targets.sdist]
 include = [

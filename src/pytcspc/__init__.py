@@ -1,4 +1,10 @@
-__version__ = "1.0.0"
+
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("pytcspc")
+except PackageNotFoundError:
+    __version__ = "uninstalled"
 
 from .presets import *
 from .sdt import *
