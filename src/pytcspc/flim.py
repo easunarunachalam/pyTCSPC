@@ -1,6 +1,7 @@
 __all__ = [
     "resample_from_hist",
     "decay_group",
+    "amplitude_distribution"
 ]
 
 from corner import corner
@@ -291,10 +292,6 @@ class decay_group:
         # enforce amplitude sum = 1
         gaussian_amps = np.clip(gaussian_amps, 0.0, 1.0)
         gaussian_amps[-1] = 1. - np.sum(gaussian_amps[:-1])
-        
-        # print(gaussian_amps, " ---- ", gaussian_mus, " ---- ", gaussian_sigmas)
-        # print(" ")
-        assert np.all(np.array(gaussian_amps) <= 1.0)
 
         log_min_tau, log_max_tau = np.log10(min_tau), np.log10(max_tau)
         log_taus = np.linspace(log_min_tau, log_max_tau, n_tau)
@@ -305,8 +302,7 @@ class decay_group:
         tile_microtimes = np.tile(t, (len(taus), 1)).T
         exps = np.exp(-np.divide(tile_microtimes,tile_taus))
 
-        exp_weights_from_each_gaussian = np.array([gaussian_amp*_gaussian(taus, gaussian_mu, gaussian_sigma) for gaussian_amp, gaussian_mu, gaussian_sigma in zip(gaussian_amps, gaussian_mus, gaussian_sigmas)])
-        exp_weights = np.sum(exp_weights_from_each_gaussian, axis=0)
+        exp_weights = amplitude_distribution(taus, gaussian_amps, gaussian_mus, gaussian_sigmas)
         tile_exp_weights = np.tile(exp_weights, (len(t), 1))
 
         exps_only = np.multiply(tile_exp_weights, exps).sum(axis=1)
@@ -983,3 +979,11 @@ def _gaussian(x, mu, sigma):
     """
     norm_factor = (1./np.sqrt(2*np.pi)) * (1/sigma)
     return norm_factor * np.exp(-((x-mu)/sigma)**2)
+
+def amplitude_distribution(taus, gaussian_amps, gaussian_mus, gaussian_sigmas):
+    """
+    Construct sum-of-gaussians amplitude distribution given parameters of gaussians
+    """
+    exp_weights_from_each_gaussian = np.array([gaussian_amp*_gaussian(taus, gaussian_mu, gaussian_sigma) for gaussian_amp, gaussian_mu, gaussian_sigma in zip(gaussian_amps, gaussian_mus, gaussian_sigmas)])
+
+    return np.sum(exp_weights_from_each_gaussian, axis=0)
