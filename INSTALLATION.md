@@ -8,7 +8,7 @@ conda activate pytcspc
 
 Then install `pytcspc`:
 ```
-pip install -i https://test.pypi.org/simple/ pytcspc
+pip install pytcspc
 ```
 
 and verify that it works, e.g. by running:
