@@ -623,6 +623,11 @@ class decay_group:
             verbose=False,
             plot=False,
         ):
+        """
+        Fit a model to loaded data.
+        Specify initial parameters for the fit via `parameters`, and include any fixed parameters in the list `fixed_parameters` as a string. Pass any optional arguments to specific fitting method via `method_args`.
+        If plot=True, show the result of the fit on top of the data.
+        """
 
         if model == "1exp":
             self.model_fn = self.model_1exp
