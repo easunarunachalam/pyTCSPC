@@ -20,6 +20,7 @@ __all__ = [
     "delta_to_minutes",
     "bits",
     "PlatformPath",
+    "reorder_dict"
 ]
 
 import h5py
@@ -297,3 +298,9 @@ def PlatformPath(filepath):
         filepath = filepath.replace("\\\\", "/").replace("\\", "/")
 
     return Path(filepath)
+
+def reorder_dict(the_dict, new_order):
+    """
+    Reorder items in dictionary
+    """
+    return {k: the_dict[k] for k in new_order}

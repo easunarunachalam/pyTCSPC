@@ -634,7 +634,7 @@ class decay_group:
                     "tau1":  {"value": 3.500, "err": np.nan, "min": 0.100, "max": 5.000, "step": 1e-3},
                 }
             else:
-                self.params = parameters
+                self.params = reorder_dict(parameters, ["shift", "A", "tau1"])
 
             fix_p = [False]*3
             for fp in fixed_parameters:
@@ -654,7 +654,7 @@ class decay_group:
             if parameters is None:
                 self.params = NADH_2EXP_INIT
             else:
-                self.params = parameters
+                self.params = reorder_dict(parameters, ["shift", "A", "tau1", "tau2", "f"])
 
             fix_p = [False]*5
             for fp in fixed_parameters:
@@ -685,7 +685,7 @@ class decay_group:
                     "f2":    {"value": 0.40, "err": np.nan, "min": 0.010, "max": 1.000, "step": 1e-3},
                 }
             else:
-                self.params = parameters
+                self.params = reorder_dict(parameters, ["shift", "A", "tau1", "tau2", "tau3", "f1", "f2"])
 
             fix_p = [False]*7
             for fp in fixed_parameters:
@@ -722,7 +722,7 @@ class decay_group:
                     "f3":    {"value": 0.500, "err": np.nan, "min": 0.001, "max": 1.000, "step": 1e-3},
                 }
             else:
-                self.params = parameters
+                self.params = reorder_dict(parameters, ["shift", "A", "tau1", "tau2", "tau3", "tau4", "f1", "f2", "f3"])
 
             fix_p = [False]*9
             for fp in fixed_parameters:
@@ -762,7 +762,7 @@ class decay_group:
                     "amp1":   {"value": 0.8, "err": np.nan, "min": 0.000, "max": 1.00, "step": 1e-3},
                 }
             else:
-                self.params = parameters
+                self.params = reorder_dict(parameters, ["shift", "A", "mu1", "sigma1", "mu2", "sigma2", "amp1"])
 
             fix_p = [False]*len(self.params)
             # for fp in fixed_parameters:
