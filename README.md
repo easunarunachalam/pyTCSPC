@@ -20,6 +20,7 @@ Please see `INSTALLATION.md`.
 - `FCS`: fit FCS data for diffusion of Alexa Fluor 488
 - `fit_oneexp`: fit decay curve for a solution of FAD
 - `fit_from_image`: fit decay curve for NAD(P)H in yeast
+- `Gibbssampling`: fit a polyexp model using least-squares regression and a biexponential model using Gibbs sampling
 
 ## Contributing
 Please see `CONTRIBUTING.md`.
