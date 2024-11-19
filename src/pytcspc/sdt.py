@@ -318,7 +318,7 @@ def decay_curve(
         if (fig is None) and (ax is None):
             fig, ax = plt.subplots(figsize=(6,4))
         ax.plot(flim_image["microtime_ns"].values, dc, label=label)
-        ax.set_xlabel(r"t/ns")
+        ax.set_xlabel(r"$t$/ns")
         if normalize:
             ax.set_ylabel(r"frequency")
         else:
