@@ -22,6 +22,7 @@ classifiers = [
 dependencies = [
     "dask",
     "bottleneck>=1.4.2",
+    "corner>=2.2.2",
     "h5py",
     "joblib",
     "matplotlib",

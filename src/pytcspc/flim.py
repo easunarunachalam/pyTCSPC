@@ -3,6 +3,7 @@ __all__ = [
     "decay_group",
 ]
 
+from corner import corner
 import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
@@ -104,6 +105,12 @@ class decay_group:
             self.params[iparam]["value"] = ival
             if errors is not None:
                 self.params[iparam]["err"] = ierr
+
+    def set_param_samples(self, param_samples):
+        """
+        Assign sampled values for parameters (e.g. from Gibbs sampling).
+        """
+        self.param_samples = param_samples
 
     def get_param_lims(self):
         """
@@ -270,19 +277,24 @@ class decay_group:
         assert (len(args)+1) % 3 == 0
         n_gaussians = (len(args)+1) // 3
 
-        gaussian_amps, gaussian_mus, gaussian_sigmas = [], [], []
+        gaussian_amps   = np.full((n_gaussians,), np.nan)
+        gaussian_mus    = np.full((n_gaussians,), np.nan)
+        gaussian_sigmas = np.full((n_gaussians,), np.nan)
 
-        for iarg in range(2*n_gaussians):
-            gaussian_mus.append(args[iarg])
-            gaussian_sigmas.append(args[iarg+1])
+        for i, iarg in enumerate(np.arange(0,2*n_gaussians,2)):
+            gaussian_mus[i]    = args[iarg]
+            gaussian_sigmas[i] = args[iarg+1]
 
-        for iarg in range(2*n_gaussians,len(args)):
-            gaussian_amps.append(args[iarg])
+        for i, iarg in enumerate(np.arange(2*n_gaussians,len(args),1)):
+            gaussian_amps[i] = args[iarg]
 
         # enforce amplitude sum = 1
-        # gaussian_amps = gaussian_amps / np.sum(gaussian_amps)
-        gaussian_amps.append( 1. - np.sum(gaussian_amps) )
-        gaussian_amps, gaussian_mus, gaussian_sigmas = np.array(gaussian_amps), np.array(gaussian_mus), np.array(gaussian_sigmas)
+        gaussian_amps = np.clip(gaussian_amps, 0.0, 1.0)
+        gaussian_amps[-1] = 1. - np.sum(gaussian_amps[:-1])
+        
+        # print(gaussian_amps, " ---- ", gaussian_mus, " ---- ", gaussian_sigmas)
+        # print(" ")
+        assert np.all(np.array(gaussian_amps) <= 1.0)
 
         log_min_tau, log_max_tau = np.log10(min_tau), np.log10(max_tau)
         log_taus = np.linspace(log_min_tau, log_max_tau, n_tau)
@@ -508,7 +520,7 @@ class decay_group:
 
         return cvg_hst, p, sigma_p, status
 
-    def log_likelihood_biexp(self, params, data=None):
+    def log_likelihood(self, params, data=None):
         # if data == None:
         #     data = self.dc_data[self.fit_start_bin:(self.fit_end_bin+1)]
 
@@ -521,7 +533,7 @@ class decay_group:
         if data == None:
             data = self.dc_data[self.fit_start_bin:(self.fit_end_bin+1)]
 
-        log_likelihood = np.apply_along_axis(lambda params: self.log_likelihood_biexp(params, data), 1, param_mat)
+        log_likelihood = np.apply_along_axis(lambda params: self.log_likelihood(params, data), 1, param_mat)
         likelihood = np.exp(log_likelihood - np.max(log_likelihood))
 
         if normalize:
@@ -532,25 +544,25 @@ class decay_group:
     def gibbs_sample(self,
             fix_p,
             nburn=50,
-            nsample=100,
+            nsample=10,
             verbose=False,
-            showprogress=False
+            show_progress=False
         ):
 
-        # nuumber of burnin steps should be even
+        # number of burnin steps should be even
         if nburn%2 != 0: nburn += 1
 
         free_params = np.where( ~np.array(fix_p) )[0]
 
-        param_lims = self.param_lims()
+        param_lims = self.get_param_lims()
         param_min, param_max, param_step = param_lims[:,0], param_lims[:,1], param_lims[:,2]
-        param_currvals = self.param_values()[:,0]
+        param_currvals = self.get_param_values()[:,0]
         param_currvals[0] = self.params["shift"]["value"]
 
         param_samples = np.empty((nsample, len(param_currvals)))
         burn_samples = np.empty((nburn//2, len(param_currvals)))
 
-        if showprogress:
+        if show_progress:
             iterator = trange(nburn+nsample)
         else:
             iterator = range(nburn+nsample)
@@ -568,7 +580,9 @@ class decay_group:
                 # need to test if below line using tile instead of repmat is correct
                 param_mat = np.tile(param_currvals, (len(iparam_range), 1))
                 param_mat[:,iparam] = iparam_range
+                # print("param mat", param_mat)
                 cond_post = self.posterior(param_mat)
+                # print("cond post", cond_post)
 
                 param_currvals[iparam] = np.random.choice(iparam_range, size=1, p=cond_post)
 
@@ -745,12 +759,11 @@ class decay_group:
                 self.params = {
                     "shift":  {"value": 0    , "err": np.nan, "min": -300 , "max":   300, "step": 1   },
                     "A":      {"value": 0.995, "err": np.nan, "min": 0.700, "max": 1.000, "step": 1e-3},
-                    "amp1":   {"value": 0.8, "err": np.nan, "min": 0.000, "max": 1.00, "step": 1e-3},
                     "mu1":    {"value": 0.2, "err": np.nan, "min": 0.001, "max": 10.0, "step": 1e-3},
                     "sigma1": {"value": 0.1, "err": np.nan, "min": 0.001, "max": 1.00, "step": 1e-3},
-                    "amp2":   {"value": 0.2, "err": np.nan, "min": 0.000, "max": 1.00, "step": 1e-3},
                     "mu2":    {"value": 2.0, "err": np.nan, "min": 0.001, "max": 10.0, "step": 1e-3},
                     "sigma2": {"value": 0.5, "err": np.nan, "min": 0.001, "max": 1.00, "step": 1e-3},
+                    "amp1":   {"value": 0.8, "err": np.nan, "min": 0.000, "max": 1.00, "step": 1e-3},
                 }
             else:
                 self.params = parameters
@@ -817,6 +830,8 @@ class decay_group:
 
             self.set_param_values(values=p, errors=sp)
 
+            ret_val = pd.DataFrame(self.params).T, status
+
             # self.params["shift"]["value"], self.params["shift"]["err"]   = p[0], sp[0]
             # self.params["A"]["value"],     self.params["A"]["err"]       = p[1], sp[1]
             # self.params["tau1"]["value"],  self.params["tau1"]["err"]    = p[2], sp[2]
@@ -834,6 +849,21 @@ class decay_group:
         #         out = m.minimize(method=method, **method_args)
         #
         #     self.params = out.params.copy()
+
+        elif method == "gibbs_sample":
+            param_samples = self.gibbs_sample(fix_p, **method_args)
+            
+            df_param_samples = pd.DataFrame(columns=list(self.params), data=param_samples)
+
+            ci = 95
+            ci_hi = np.percentile(param_samples, (100+ci)/2., axis=0)
+            ci_lo = np.percentile(param_samples, (100-ci)/2., axis=0)
+            p = np.median(param_samples, axis=0)
+            sp = (ci_hi-ci_lo)/2.35
+            self.set_param_values(values=p, errors=sp)
+            self.set_param_samples(df_param_samples)
+
+            ret_val = pd.DataFrame(self.params).T, df_param_samples
         else:
             print("")
             raise ValueError("Unknown fitting method specified")
@@ -847,7 +877,7 @@ class decay_group:
             self.plot(path=plot)
 
         # return self.param_values()
-        return pd.DataFrame(self.params).T, status
+        return ret_val
 
 
     def fit_params(self):
@@ -861,6 +891,9 @@ class decay_group:
             showfit=True,
             fitcolor="crimson",
             figsize=(12,4),
+            lw=None, ms=None
+            # figsize=(6,2),
+            # lw=0.75, ms=2
         ):
 
         if type(params) != np.ndarray:
@@ -881,11 +914,11 @@ class decay_group:
 
         xlims = [-0.5,12.5]
         ax = fig.add_subplot(spec[0,0])
-        ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
+        ax.plot(self.t_data, self.dc_data, "o", ms=ms, color=datacolor, alpha=dataalpha, label="data")
         if showfit:
-            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.plot(self.use_t, self.final_yhat, lw=lw, color=fitcolor, linestyle="-", label="fit")
             ax2 = ax.twinx()
-            ax2.plot(self.t_irf, self.dc_irf, color="olivedrab", alpha=0.85, label="IRF")
+            ax2.plot(self.t_irf, self.dc_irf, lw=lw, color="olivedrab", alpha=0.85, label="IRF")
         ax.set_xlim(xlims)
         ax.set_xticks(np.arange(0,12.6))
         ax.legend()
@@ -895,21 +928,20 @@ class decay_group:
         ax2.set_yscale("log")
 
         ax = fig.add_subplot(spec[0,1])
-        ax.plot(self.t_data, self.dc_data, "o", color=datacolor, alpha=dataalpha, label="data")
+        ax.plot(self.t_data, self.dc_data, "o", ms=ms, color=datacolor, alpha=dataalpha, label="data")
         if showfit:
-            ax.plot(self.use_t, self.final_yhat, color=fitcolor, linestyle="-", label="fit")
+            ax.plot(self.use_t, self.final_yhat, lw=lw, color=fitcolor, linestyle="-", label="fit")
             ax2 = ax.twinx()
-            ax2.plot(self.t_irf, self.dc_irf, color="olivedrab", alpha=0.85, label="IRF")
+            ax2.plot(self.t_irf, self.dc_irf, lw=lw, color="olivedrab", alpha=0.85, label="IRF")
         ax.set_xlim(xlims)
         ax.set_xticks(np.arange(0,12.6))
         ax.set_xlabel(r"$t$/ns")
 
         ax = fig.add_subplot(spec[1,0])
-        ax.plot(self.use_t, scaled_residual, color=datacolor, alpha=dataalpha*2)
+        ax.plot(self.use_t, scaled_residual, lw=lw, color=datacolor, alpha=dataalpha*2)
         ax.set_xlim(xlims)
         ax.set_xticks(np.arange(0,12.6))
         ax.axhline(y=0, color="gray")
-        # ax.set_ylim([-0.05,0.05])
         ax.set_xlabel(r"$t$/ns")
         ax.set_ylabel(r"scaled residual")
 
@@ -925,6 +957,24 @@ class decay_group:
         else:
             plt.show()
 
+    def plot_samples(self):
+        """
+        Make a corner plot using parameter samples, e.g. from Gibbs sampling
+        """
+        range_is_zero = (np.max(self.param_samples, axis=0) - np.min(self.param_samples, axis=0)) == 0
+        columns_to_drop = range_is_zero.loc[range_is_zero].index.values
+        param_samples_to_plot = self.param_samples.drop(columns_to_drop, axis=1)
+
+        labels = list(param_samples_to_plot.columns)
+        for i in range(len(labels)):
+            if labels[i][:3] == "tau":
+                labels[i] = r"$\tau" + "_{" + labels[i][3:] + "}$/ns"
+            else:
+                labels[i] = r"$" + labels[i] + r"$"
+
+        # fig, ax = plt.subplots(figsize=())
+        corner(param_samples_to_plot, labels=labels)
+        plt.show()
 
 def _gaussian(x, mu, sigma):
     """
