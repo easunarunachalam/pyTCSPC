@@ -134,3 +134,23 @@ dmypy.json
 
 # SPCM settings files
 *.set
+examples/Gibbssampling/sample_data/IRF.sdt
+examples/Gibbssampling/sample_data/p7_z1.sdt
+examples/Gibbssampling/sample_data/p7_z1.tif
+examples/Gibbssampling/sample_data/p7_z1_Probabilities.npy
+examples/Gibbssampling/sample_data/p7_z2.sdt
+examples/Gibbssampling/sample_data/p7_z2.tif
+examples/Gibbssampling/sample_data/p7_z2_Probabilities.npy
+examples/Gibbssampling/sample_data/p7_z3.sdt
+examples/Gibbssampling/sample_data/p7_z3.tif
+examples/Gibbssampling/sample_data/p7_z3_Probabilities.npy
+examples/lifetime_image/sample_data/IRF.sdt
+examples/lifetime_image/sample_data/p7_z1.sdt
+examples/lifetime_image/sample_data/p7_z1.tif
+examples/lifetime_image/sample_data/p7_z1_Probabilities.npy
+examples/lifetime_image/sample_data/p7_z2.sdt
+examples/lifetime_image/sample_data/p7_z2.tif
+examples/lifetime_image/sample_data/p7_z2_Probabilities.npy
+examples/lifetime_image/sample_data/p7_z3.sdt
+examples/lifetime_image/sample_data/p7_z3.tif
+examples/lifetime_image/sample_data/p7_z3_Probabilities.npy
