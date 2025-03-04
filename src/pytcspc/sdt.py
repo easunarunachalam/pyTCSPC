@@ -52,11 +52,11 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=True)
     file.data = np.array(file.data, dtype=dtype)
 
     times    = np.array(file.times)[0] * 1e9
-
+    
     mi = file.measure_info[0]
-    numscans = np.maximum(1, mi.MeasHISTInfo.fida_points[0])
-    # print(mi["StopInfo"]["min_sync_rate"], mi["StopInfo"]["max_sync_rate"])
-    laser_period = np.mean((1/mi["StopInfo"]["min_sync_rate"][0], 1/mi["StopInfo"]["max_sync_rate"][0]))*1e9
+
+    numscans = np.maximum(1, mi.MeasHISTInfo.fida_points)
+    laser_period = np.mean((1/mi["StopInfo"]["min_sync_rate"], 1/mi["StopInfo"]["max_sync_rate"]))*1e9
 
     dim_list = ["file_info"]
     for dim in dims:
@@ -79,7 +79,7 @@ def load_sdt(f, dims="CYXM", channel_names=None, dtype=np.uint32, use_dask=True)
             "numscans": ("file_info", [numscans]),
             "laser_period": ("file_info", [laser_period]),
             "channel": channel_names,
-            "microtime_ns": np.array(file.times)[0] * 1e9,
+            "microtime_ns": times,
         },
     )
 
