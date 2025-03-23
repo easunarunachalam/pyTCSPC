@@ -20,3 +20,11 @@ It is typical to run `pytcspc` via a Jupyter notebook or in JupyterLab. To insta
 ```
 pip install jupyterlab ipywidgets
 ```
+
+# If installing for development
+Also install git, then navigate to the local directory where you have cloned the pyTCSPC repository and install:
+```
+conda install git
+cd <cloned_repo_location>
+pip install -e .
+``
