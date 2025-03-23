@@ -27,5 +27,5 @@ Also install git, then navigate to the local directory where you have cloned the
 conda install git
 cd <cloned_repo_location>
 pip install -e .
-``
+```
 It can also be helpful to have a couple of other packages for actually working with real data: `pip install napari statannotations`
