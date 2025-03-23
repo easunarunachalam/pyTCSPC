@@ -21,6 +21,8 @@ It is typical to run `pytcspc` via a Jupyter notebook or in JupyterLab. To insta
 pip install jupyterlab ipywidgets
 ```
 
+It can also be helpful to have a few other packages for actually working with real data: `pip install napari[all] statsmodels statannotations`
+
 # If installing for development
 Also install git, then navigate to the local directory where you have cloned the pyTCSPC repository and install:
 ```
@@ -28,4 +30,3 @@ conda install git
 cd <cloned_repo_location>
 pip install -e .
 ```
-It can also be helpful to have a couple of other packages for actually working with real data: `pip install ipywidgets napari[all] astroml statsmodels statannotations`
