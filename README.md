@@ -1,4 +1,6 @@
-# `pytcspc`: a Python library for fluorescence lifetime imaging microscopy (FLIM) and fluorescence correlation spectroscopy (FCS) data analysis
+# `pytcspc`: analysis of time-correlated single photon counting (TCSPC) data
+
+This python library can be used for analyzing time-domain fluorescence lifetime imaging microscopy (FLIM) data and fluorescence correlation spectroscopy (FCS) data collected with TCSPC hardware.
 
 ## Installing
 Please see `INSTALLATION.md`.
